@@ -121,7 +121,7 @@ def capture_env(machine: str, clocks_locked: bool, sm_clock: str = "") -> dict[s
         "clocks_locked": "yes" if clocks_locked else "no",
         "toolkit": toolkit,
         "git_commit": sh(["git", "-C", str(REPO), "rev-parse", "HEAD"]),
-        "git_dirty": "yes" if sh(["git", "-C", str(REPO), "status", "--porcelain"]) else "no",
+        "git_dirty": git_dirty(),
     }
 
 
@@ -135,6 +135,19 @@ def derive(row: dict[str, str]) -> dict[str, str]:
     except (KeyError, ValueError):
         gbps, tflops = 0.0, 0.0
     return {"achieved_gbps": f"{gbps:.3f}", "achieved_tflops": f"{tflops:.4f}"}
+
+
+def git_dirty() -> str:
+    """Dirtiness of the source tree, ignoring benchmark outputs.
+
+    The results/ and figures/ directories are written by this pipeline, so their
+    presence must not mark a run dirty — otherwise no run could ever be clean.
+    A modified or untracked source file still does.
+    """
+    out = sh(["git", "-C", str(REPO), "status", "--porcelain"])
+    dirty = [line for line in out.splitlines()
+             if not line.startswith("?? results/") and not line.startswith("?? figures/")]
+    return "yes" if dirty else "no"
 
 
 def main() -> int:
