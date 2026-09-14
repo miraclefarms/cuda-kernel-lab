@@ -122,6 +122,7 @@ docker/      复现容器：Dockerfile（digest 固定）+ run.sh
 docker build -t cuda-kernel-lab:13.3.1 docker/  # 复现容器，见 docs/container.md
 ./docker/run.sh                                 # 进容器（宿主机驱动需 >= 580.65.06）
 
+./tools/setup.sh                                # 进容器第一件事：装工具 + 建 build + 预检
 cmake -B build -DCMAKE_CUDA_ARCHITECTURES=90a   # H20 / H200；A100 用 80
 cmake --build build -j
 ./build/kernels/01-execution-model/bench-probe  # 设备基线画像

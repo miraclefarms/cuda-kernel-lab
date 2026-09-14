@@ -50,20 +50,32 @@ docker build -t cuda-kernel-lab:13.3.1 docker/
 | `--ulimit memlock=-1` | 避免 pinned memory 被 rlimit 卡住 |
 | `-v $REPO:/workspace` | 代码与结果落在宿主机，容器退出不丢数据 |
 
+## 首次进入容器：`tools/setup.sh`
+
+进容器第一件事，先把它跑一遍再采集任何数据：
+
+```bash
+./tools/setup.sh                # 装缺失的包 → 按 GPU 推导 arch 建 build/ → preflight --matrix
+./tools/setup.sh --no-build     # 只装工具 + 校验
+SETUP_SKIP_INSTALL=1 ./tools/setup.sh   # 只校验，不碰 apt（镜像已装好时用）
+```
+
+幂等，可重复跑。它只补 `dpkg -s` 查出来缺的包，安装清单与 Dockerfile 一致，所以在基础
+CUDA 镜像或裸机上也能用；Nsight 装不上只告警（没有计数器证据是被方法论允许的）。
+`build/` 的 arch 由 `nvidia-smi` 的 compute capability 推导（8.x→80，9.x→90a，10.x→100，
+12.x→120），也可用 `CMAKE_CUDA_ARCHITECTURES` 覆盖。退出码非 0 表示 preflight 有 BLOCK 项。
+
 ## 完整复现流程
 
 ```bash
 docker build -t cuda-kernel-lab:13.3.1 docker/
 ./docker/run.sh bash -lc '
-  cmake -B build -DCMAKE_CUDA_ARCHITECTURES=90a &&
-  cmake --build build -j &&
+  ./tools/setup.sh &&                                # 装工具 + 建 build + 预检
   ./build/kernels/01-execution-model/bench-probe &&
   python3 tools/run.py --kernel 00-template --machine h200 &&
   python3 tools/plot.py results/00-template/*.csv -o figures/00-template/
 '
 ```
-
-A100 上把 `90a` 换成 `80`。
 
 ## ncu 权限
 
