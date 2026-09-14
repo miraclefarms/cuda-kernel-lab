@@ -124,7 +124,7 @@ if [ "$MATRIX" = "1" ]; then
   echo "| 驱动版本 | $DRIVER |"
   echo "| CUDA Toolkit | $(nvcc --version 2>/dev/null | grep release | sed 's/.*release //' || echo '未安装') |"
   echo "| 容器镜像 | 待填 |"
-  echo "| bench-probe 输出 | 待填（运行 ./build/bench/bench-probe 回填）|"
+  echo "| bench-probe 输出 | 待填（运行 ./build/kernels/01-execution-model/bench-probe 回填）|"
   echo "| 实测 streaming 上限 / 标称 | 待填（bench-probe 的 best cold/hot，同时写入 bench/machine-peaks.json）|"
   echo "| 锁频权限 | $( [ "$(id -u)" = 0 ] && echo '✅ root 可锁' || echo '❌ 非 root' ) |"
   echo "| ncu 计数器权限 | $(command -v ncu >/dev/null 2>&1 && echo '待确认（见上）' || echo '❌ 未安装') |"

@@ -155,13 +155,21 @@ def main() -> int:
     ap.add_argument("--kernel", required=True, help="kernel directory name, e.g. 00-template")
     ap.add_argument("--machine", required=True, help="machine codename: a100 | h20 | h200")
     ap.add_argument("--build", default="build", help="cmake build directory")
+    ap.add_argument("--binary", default=None,
+                    help="explicit binary path (repo-relative ok); overrides the "
+                         "default build/kernels/<kernel>/kernel-<kernel>")
     ap.add_argument("--clocks-locked", action="store_true",
                     help="pass only if you actually ran nvidia-smi -lgc")
     ap.add_argument("--out-dir", default=None)
     ap.add_argument("rest", nargs=argparse.REMAINDER, help="args forwarded to the binary")
     args = ap.parse_args()
 
-    binary = REPO / args.build / "kernels" / args.kernel / f"kernel-{args.kernel}"
+    if args.binary:
+        binary = pathlib.Path(args.binary)
+        if not binary.is_absolute():
+            binary = REPO / binary
+    else:
+        binary = REPO / args.build / "kernels" / args.kernel / f"kernel-{args.kernel}"
     if not binary.exists():
         print(f"binary not found: {binary}\nbuild it first:\n"
               f"  cmake -B {args.build} -DCMAKE_CUDA_ARCHITECTURES=90a && "

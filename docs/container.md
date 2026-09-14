@@ -57,7 +57,7 @@ docker build -t cuda-kernel-lab:13.3.1 docker/
 ./docker/run.sh bash -lc '
   cmake -B build -DCMAKE_CUDA_ARCHITECTURES=90a &&
   cmake --build build -j &&
-  ./build/bench/bench-probe &&
+  ./build/kernels/01-execution-model/bench-probe &&
   python3 tools/run.py --kernel 00-template --machine h200 &&
   python3 tools/plot.py results/00-template/*.csv -o figures/00-template/
 '

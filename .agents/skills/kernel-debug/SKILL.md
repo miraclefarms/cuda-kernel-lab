@@ -26,7 +26,7 @@ description: cuda-kernel-lab 的实验排查手册——数字可疑、两次跑
 **达成率超过 80% 就要警惕，超过 100% 一定是这里出了问题。**
 
 ```bash
-./build/bench/bench-probe | grep -i "L2"
+./build/kernels/01-execution-model/bench-probe | grep -i "L2"
 ```
 
 工作集必须远大于 L2（h20 是 60 MiB）。用 `bench::kStreamBufferBytes` 就不会错。自己写计时循环而绕过 `measure_cold` 的话，L2 不会被 flush——`bench-probe` 早期版本正是这样报出过一个比真实 kernel 还低的天花板。
@@ -45,7 +45,7 @@ grep -E "sm_clock|clocks_locked|git_dirty|mig" results/{NN}-{slug}/*.csv
 ## 5. 网格与占用率
 
 ```bash
-./build/bench/bench-probe    # SM 数、寄存器/SM、SMEM/SM
+./build/kernels/01-execution-model/bench-probe    # SM 数、寄存器/SM、SMEM/SM
 ```
 
 - 网格是不是写死的常数？三台机器 108 / 78 / 132 SM，常数网格在其中两台上必然错

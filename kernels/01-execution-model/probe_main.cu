@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <string>
 
+#include "bench/csv.hpp"
 #include "bench/stream.cuh"
 #include "bench/timing.cuh"
 
@@ -39,7 +40,17 @@ void print_kv(const char* k, double v) { std::printf("%-28s %.2f\n", k, v); }
 
 int main(int argc, char** argv) {
   int device = 0;
-  if (argc > 1) device = std::atoi(argv[1]);
+  bool csv_mode = false;
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--csv") {
+      csv_mode = true;
+    } else if (arg == "--device" && i + 1 < argc) {
+      device = std::atoi(argv[++i]);
+    } else if (!arg.empty() && arg[0] != '-') {
+      device = std::atoi(arg.c_str());
+    }
+  }
   BENCH_CHECK(cudaSetDevice(device));
 
   cudaDeviceProp p{};
@@ -51,41 +62,67 @@ int main(int argc, char** argv) {
   BENCH_CHECK(cudaRuntimeGetVersion(&runtime));
   const double theoretical = theoretical_gbps(p, device);
 
-  print_kv("device", std::string(p.name));
-  print_kv("compute capability", std::to_string(p.major) + "." + std::to_string(p.minor));
-  print_kv("driver version", static_cast<long long>(driver));
-  print_kv("runtime version", static_cast<long long>(runtime));
-  print_kv("SM count", static_cast<long long>(p.multiProcessorCount));
-  print_kv("max threads / SM", static_cast<long long>(p.maxThreadsPerMultiProcessor));
-  print_kv("regs / SM", static_cast<long long>(p.regsPerMultiprocessor));
-  print_kv("smem / SM (KiB)", static_cast<long long>(p.sharedMemPerMultiprocessor / 1024));
-  print_kv("smem / block opt-in (KiB)",
-           static_cast<long long>(p.sharedMemPerBlockOptin / 1024));
-  print_kv("L2 (MiB)", static_cast<long long>(p.l2CacheSize / (1024 * 1024)));
-  print_kv("global memory (GiB)",
-           static_cast<double>(p.totalGlobalMem) / (1024.0 * 1024.0 * 1024.0));
-  print_kv("memory bus (bit)", static_cast<long long>(p.memoryBusWidth));
-  print_kv("theoretical BW (GB/s)", theoretical);
-  print_kv("clock rate (MHz)", static_cast<double>(device_attr(cudaDevAttrClockRate, device)) / 1e3);
-  print_kv("memory clock (MHz)",
-           static_cast<double>(device_attr(cudaDevAttrMemoryClockRate, device)) / 1e3);
-  print_kv("cooperative launch", static_cast<long long>(p.cooperativeLaunch));
-  print_kv("async engine count", static_cast<long long>(p.asyncEngineCount));
-  print_kv("unified addressing", static_cast<long long>(p.unifiedAddressing));
-  print_kv("ECC enabled", static_cast<long long>(p.ECCEnabled));
-  print_kv("compute mode", static_cast<long long>(device_attr(cudaDevAttrComputeMode, device)));
+  if (!csv_mode) {
+    print_kv("device", std::string(p.name));
+    print_kv("compute capability", std::to_string(p.major) + "." + std::to_string(p.minor));
+    print_kv("driver version", static_cast<long long>(driver));
+    print_kv("runtime version", static_cast<long long>(runtime));
+    print_kv("SM count", static_cast<long long>(p.multiProcessorCount));
+    print_kv("max threads / SM", static_cast<long long>(p.maxThreadsPerMultiProcessor));
+    print_kv("regs / SM", static_cast<long long>(p.regsPerMultiprocessor));
+    print_kv("smem / SM (KiB)", static_cast<long long>(p.sharedMemPerMultiprocessor / 1024));
+    print_kv("smem / block opt-in (KiB)",
+             static_cast<long long>(p.sharedMemPerBlockOptin / 1024));
+    print_kv("L2 (MiB)", static_cast<long long>(p.l2CacheSize / (1024 * 1024)));
+    print_kv("global memory (GiB)",
+             static_cast<double>(p.totalGlobalMem) / (1024.0 * 1024.0 * 1024.0));
+    print_kv("memory bus (bit)", static_cast<long long>(p.memoryBusWidth));
+    print_kv("theoretical BW (GB/s)", theoretical);
+    print_kv("clock rate (MHz)",
+             static_cast<double>(device_attr(cudaDevAttrClockRate, device)) / 1e3);
+    print_kv("memory clock (MHz)",
+             static_cast<double>(device_attr(cudaDevAttrMemoryClockRate, device)) / 1e3);
+    print_kv("cooperative launch", static_cast<long long>(p.cooperativeLaunch));
+    print_kv("async engine count", static_cast<long long>(p.asyncEngineCount));
+    print_kv("unified addressing", static_cast<long long>(p.unifiedAddressing));
+    print_kv("ECC enabled", static_cast<long long>(p.ECCEnabled));
+    print_kv("compute mode", static_cast<long long>(device_attr(cudaDevAttrComputeMode, device)));
 
-  // Feature gates this series actually cares about. cc >= 9.0 is the line where
-  // TMA, thread block clusters, DSMEM and wgmma appear.
-  const bool hopper_plus = (p.major >= 9);
-  const bool blackwell_plus = (p.major >= 10);
-  print_kv("TMA / cluster / wgmma", std::string(hopper_plus ? "yes (cc >= 9.0)" : "no"));
-  print_kv("tcgen05 / TMEM", std::string(blackwell_plus ? "yes (cc >= 10.0)" : "no"));
+    // Feature gates this series actually cares about. cc >= 9.0 is the line where
+    // TMA, thread block clusters, DSMEM and wgmma appear.
+    const bool hopper_plus = (p.major >= 9);
+    const bool blackwell_plus = (p.major >= 10);
+    print_kv("TMA / cluster / wgmma", std::string(hopper_plus ? "yes (cc >= 9.0)" : "no"));
+    print_kv("tcgen05 / TMEM", std::string(blackwell_plus ? "yes (cc >= 10.0)" : "no"));
+  }
 
   // Same measurement path as every kernel in the repo, so this number is a
   // legitimate denominator rather than a differently-measured curiosity.
   const bench::StreamCeiling bw = bench::measure_stream_ceiling(device, /*warmup=*/5,
                                                                 /*samples=*/30, /*batch=*/20);
+
+  if (csv_mode) {
+    bench::print_csv_header();
+    const std::string shape = "buf=" + std::to_string(bench::kStreamBufferBytes >> 20) + "MiB";
+    const auto emit = [&](const char* variant, const bench::StreamResult& r) {
+      for (const char* mode : {"cold", "hot"}) {
+        bench::RunRow out;
+        out.kernel = "01-execution-model";
+        out.variant = variant;
+        out.mode = mode;
+        out.shape = shape;
+        out.dtype = "fp32";
+        out.bytes = r.bytes;
+        out.stats = std::string(mode) == "cold" ? r.cold : r.hot;
+        bench::print_csv_row(out);
+      }
+    };
+    emit("read", bw.read);
+    emit("copy", bw.copy);
+    emit("write", bw.write);
+    return 0;
+  }
+
   const auto pct = [theoretical](double v) { return 100.0 * v / theoretical; };
   std::printf("\n-- measured streaming ceiling (%zu MiB buffer, same cold/hot discipline as kernels) --\n",
               bench::kStreamBufferBytes >> 20);

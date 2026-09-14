@@ -29,7 +29,7 @@ CUDA 13 语言特性与硬件优化系列的代码与实验仓库。
 
 | # | 主题 | 代码 | 文章 |
 |---|------|------|------|
-| 01 | 执行模型与三机基线画像 | `bench/src/probe_main.cu` | 待发布 |
+| 01 | 执行模型与三机基线画像 | `kernels/01-execution-model/` | 待发布 |
 | 02 | 内存层级与搬运范式 | — | 待发布 |
 | 03 | 可信 microbenchmark 方法论 | `bench/` | 待发布 |
 | 04–08 | 异步与流水线（TMA / mbarrier / warp specialization / cluster / PDL）| — | 待发布 |
@@ -47,7 +47,7 @@ docker build -t cuda-kernel-lab:13.3.1 docker/
 ./docker/run.sh bash -lc '
   cmake -B build -DCMAKE_CUDA_ARCHITECTURES=90a &&   # A100 用 80
   cmake --build build -j &&
-  ./build/bench/bench-probe &&
+  ./build/kernels/01-execution-model/bench-probe &&
   python3 tools/run.py --kernel 00-template --machine h200 &&
   python3 tools/plot.py results/00-template/*.csv -o figures/00-template/
 '

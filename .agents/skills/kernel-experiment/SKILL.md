@@ -46,10 +46,20 @@ cp -r kernels/00-template kernels/{NN}-{slug}
 
 `{NN}` 是篇号（01–19），`{slug}` 是英文短名。**目录名建立后不再改**——文章里的 permalink 指向它。在根 `CMakeLists.txt` 加一行 `add_subdirectory(kernels/{NN}-{slug})`，并改子目录 CMake 的 target 名。
 
-写一份 `README.md` 说明：这篇要证明什么、预期在哪台机器上收益反号。
+写一份 `README.md`（不必像文章，但必须覆盖，形状以 `kernels/00-template/README.md` 为准）：
+
+- **要验证的问题**：这篇证明什么，预期在哪台机器收益反号
+- **目录代码**：每个源文件 / target 的作用，baseline 与 optimized 分别在哪
+- **所用技术**：涉及的 CUDA 13 / 硬件特性，一句话说明为什么用
+- **实验数据**：从 `results/{NN}-{slug}/*.csv` 抄关键行成表，写结论与失效边界；未采集时显式写「待采集」
+- **截图**：嵌入 `figures/{NN}-{slug}/*.png`（相对路径 `../../figures/{NN}-{slug}/...`）
+- **复现**：build / run / plot 三条命令
+
+数据跑完后回来把「实验数据」与「截图」两节补上，不能把「待采集」留到开写。
 
 ## 写代码的硬约束
 
+- **单篇代码只放 `kernels/{NN}-{slug}/`**，不要塞进 `bench/`；只有真正跨篇复用的模块才进 `bench/`（判断标准：删掉这篇它还该不该存在）
 - **`baseline` 与 `optimized` 并列**，跑同一问题、同一输入
 - **正确性先于性能**：optimized 的输出先对齐 baseline 再计时，快的错 kernel 是最贵的错误
 - **cold 与 hot 都输出**，走 `bench::measure_cold` / `measure_hot`，不要自己写计时循环——`bench-probe` 曾经因为自建计时而报出一个比真实 kernel 还低的「天花板」
@@ -85,11 +95,12 @@ python3 tools/plot.py results/{NN}-{slug}/*.csv -o figures/{NN}-{slug}/
 
 带宽受限的篇目看 `-bandwidth.png`（带理论峰值与 streaming 天花板参考线），算力受限看 `-latency.png`。图一律由 CSV 生成，**不手画**。
 
-## 回填（三处，缺一不可）
+## 回填（四处，缺一不可）
 
-1. **`bench/machine-peaks.json`**：首次在某机器跑 `bench-probe` 后，把 best cold/hot 写进 `bw_ceiling_*_gbps`
-2. **`docs/environment-matrix.md`** 第二部分：驱动、toolkit、容器、探测输出、权限状态
-3. **content repo 的 `lab-pin.yaml`**：commit hash、机器、版本、CSV 路径、已同步配图
+1. **`kernels/{NN}-{slug}/README.md`** 的「实验数据」与「截图」两节：从 CSV 抄关键行成表，嵌入生成的图
+2. **`bench/machine-peaks.json`**：首次在某机器跑 `bench-probe` 后，把 best cold/hot 写进 `bw_ceiling_*_gbps`
+3. **`docs/environment-matrix.md`** 第二部分：驱动、toolkit、容器、探测输出、权限状态
+4. **content repo 的 `lab-pin.yaml`**：commit hash、机器、版本、CSV 路径、已同步配图
 
 ## 提交
 
@@ -108,5 +119,6 @@ python3 tools/check_confidential.py --staged
 - [ ] 本机 + 交叉编译都通过
 - [ ] CSV 齐全，`git_dirty=no`，扫描的全部配置都保留
 - [ ] 图已生成
-- [ ] 三处回填完成
+- [ ] 篇目 README 的实验数据与截图两节已回填，无「待采集」
+- [ ] 四处回填完成
 - [ ] 保密闸门通过

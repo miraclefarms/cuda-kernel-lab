@@ -24,3 +24,4 @@ add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>)
 
 add_subdirectory(bench)
 add_subdirectory(kernels/00-template)
+add_subdirectory(kernels/01-execution-model)

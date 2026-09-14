@@ -23,7 +23,7 @@ MiracleFarms「CUDA 13 语言特性与硬件优化」系列文章的**代码与�
 
 每篇文章开写前，本仓库必须已经产出下面四项，缺一项就不该开写：
 
-1. **代码**：`kernels/{NN}-{slug}/` 下 `baseline` 与 `optimized` 并列，可编译可运行
+1. **代码**：`kernels/{NN}-{slug}/` 下 `baseline` 与 `optimized` 并列，可编译可运行（第 01 篇是基线画像，只有画像工具、无 optimized，见该目录 README），并附一份 `README.md` 覆盖代码、要测什么、所用技术、实验数据与截图
 2. **数据**：`results/{NN}-{slug}/{date}-{machine}.csv`，schema 见 `docs/measurement-methodology.md`，**每台跑过的机器一份**
 3. **配图**：`figures/{NN}-{slug}/*.png`，由 `tools/plot.py` 从 CSV 生成，**不手画**
 4. **pin 信息**：commit hash、机器列表、toolkit/驱动版本、CSV 路径——回填进 content repo 的 `private-workspace/projects/cuda-kernel-series/lab-pin.yaml`
@@ -62,17 +62,40 @@ python3 tools/check_confidential.py --staged # 提交前
 ## 目录约定
 
 ```
-bench/       harness：计时、L2 flush、设备探测、CSV 输出
+bench/       共用 harness：计时、L2 flush、stream 上限、CSV schema。只放跨篇模块
 kernels/     每篇一个目录 {NN}-{slug}/，baseline 与 optimized 并列
 results/     CSV 原始数据，按 {NN}-{slug}/{date}-{machine}.csv
 figures/     由 CSV 生成的 PNG
-tools/       preflight.sh / run.py / plot.py / check_confidential.py
+tools/       preflight.sh / run.py / plot.py / check_confidential.py（共用）
 .agents/skills/  kernel-experiment（数据生产闭环）、kernel-debug（排查手册）
 docs/        接口约定、环境矩阵、测量方法论、容器、复现说明
 docker/      复现容器：Dockerfile（digest 固定）+ run.sh
 ```
 
 `{NN}` 是文章篇号（01–19），`{slug}` 是该篇的英文短名。目录名一旦建立不再改，因为文章里的 permalink 指向它。
+
+### 代码归属（MANDATORY）
+
+**一篇文章的专属代码必须能靠路径或文件名前缀认出属于哪一篇**，只有真正跨篇复用的模块例外：
+
+- 单篇专属 → `kernels/{NN}-{slug}/`：该篇的可执行目标、源文件、README 都放这里
+- 跨篇共用 → `bench/`（计时 / L2 flush / stream / CSV schema）、`tools/`（预检 / 运行 / 出图 / 保密检查）
+- 判断标准：**删掉某一篇文章后它还该不该存在**。该留 → 共用；该删 → 属于那一篇
+- 共用模块不得反向依赖单篇代码；单篇目录通过 `bench_headers` / `bench_stream` 链接共用模块
+- 第 01 篇的 `bench-probe` 是专属工具（设备基线画像），放在 `kernels/01-execution-model/` 而不是 `bench/`；它回填的 `bench/machine-peaks.json` 是共用基线数据
+
+### 篇目 README 约定（MANDATORY）
+
+每个 `kernels/{NN}-{slug}/` 必须有一份 `README.md`，不必像文章那样面面俱到，但要覆盖：
+
+- **要验证的问题**：这篇证明什么，预期在哪台机器收益反号
+- **目录代码**：每个源文件 / target 的作用，baseline 与 optimized 分别在哪
+- **所用技术**：涉及的 CUDA 13 / 硬件特性，一句话说明为什么用它
+- **实验数据**：从 `results/{NN}-{slug}/*.csv` 抄关键行成表，写结论与失效边界；未采集时显式写「待采集」
+- **截图**：嵌入 `figures/{NN}-{slug}/*.png`（相对路径 `../../figures/{NN}-{slug}/...`）
+- **复现**：build / run / plot 三条命令
+
+形状以 `kernels/00-template/README.md` 为准。数据与截图两节必须随实验回填，不能把「待采集」留到开写。
 
 ## 接口约定
 
@@ -101,7 +124,7 @@ docker build -t cuda-kernel-lab:13.3.1 docker/  # 复现容器，见 docs/contai
 
 cmake -B build -DCMAKE_CUDA_ARCHITECTURES=90a   # H20 / H200；A100 用 80
 cmake --build build -j
-./build/bench/bench-probe                       # 设备基线画像
+./build/kernels/01-execution-model/bench-probe  # 设备基线画像
 python3 tools/run.py --kernel 00-template --machine h200
 python3 tools/plot.py results/00-template/*.csv -o figures/00-template/  # 延迟 + 带宽两种视图
 python3 tools/check_confidential.py

@@ -3,10 +3,14 @@
 全系列共用的测量基础设施。改这里等于改所有已发表数字的口径，改动必须同步更新
 `docs/measurement-methodology.md`，并在文章里说明。
 
+**这里只放共用模块**：某一篇专属的代码放 `kernels/{NN}-{slug}/`，不放这里。判断标准是
+「删掉某一篇文章后它还该不该存在」。`bench-probe` 属于第 01 篇，已移到
+`kernels/01-execution-model/`。
+
 - `include/bench/timing.cuh` — `measure_cold` / `measure_hot` 两种口径、L2 flush、分位数统计
 - `include/bench/csv.hpp` — 测量侧 CSV schema（环境列由 `tools/run.py` 补齐）
-- `src/probe_main.cu` — `bench-probe`，打印本机基线画像，并实测 streaming
-  带宽（read / copy / write）与标称值对比
+- `include/bench/stream.cuh`、`src/stream.cu` — streaming 上限测量（read / copy / write）
+- `machine-peaks.json` — 达成率分母，由第 01 篇的 `bench-probe` 回填
 
 ## 为什么分 cold / hot
 

@@ -28,7 +28,7 @@ CMakeLists 里直接报错而不是给默认值。`90a` 的 `a` 后缀不能省�
 ## 跑一次
 
 ```bash
-./build/bench/bench-probe                                  # 先看本机画像
+./build/kernels/01-execution-model/bench-probe              # 先看本机画像
 python3 tools/run.py --kernel 00-template --machine h200   # 写 results/00-template/
 python3 tools/plot.py results/00-template/*.csv -o figures/00-template/
 ```
