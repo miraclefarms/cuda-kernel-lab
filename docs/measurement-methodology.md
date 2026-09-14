@@ -31,7 +31,7 @@
 ## ncu 计数器
 
 采计数器默认需要 `NVreg_RestrictProfilingToAdminUsers=0` 或 root。用
-`tools/env_capture.sh` 先确认。拿不到权限时，退到 wall-clock + 带宽利用率推断，
+`tools/preflight.sh` 先确认。拿不到权限时，退到 wall-clock + 带宽利用率推断，
 并在文章里显式声明「本篇无 ncu 计数器」，不要用别处的计数器数字冒充。
 
 ## CSV schema
@@ -73,9 +73,14 @@
 
 算力类结论用理论 dense 峰值即可，没有等价的「实测上限」参照。
 
-⚠ 已知不一致：`bench-probe` 的 streaming 用 256 MiB 工作集，而 `00-template` 用
-768 MiB，后者反而测出更高的带宽（4113 vs 3870 GB/s）。在把 streaming 上限当分母之前
-需要先统一工作集，或明确它只作参考量级。
+天花板与 kernel 必须用**同一套纪律和同一个工作集**测出来，否则不能相除：
+`bench-probe` 走的是和所有 kernel 相同的 `measure_cold` / `measure_hot`，工作集统一为
+`bench::kStreamBufferBytes`（256 MiB／缓冲区）。早期版本它自建计时循环、不 flush L2，
+报出的「天花板」被 `00-template` 超出 6% —— 那不是天花板，是一个无关的数字。
+
+分母写在 `bench/machine-peaks.json`，`tools/plot.py` 直接读它画参考线，所以图和文档
+不可能对不上。某台机器的 `bw_ceiling_*_gbps` 为 `null` 表示还没在那台机器上跑过
+`bench-probe`。
 
 ## 文件命名
 

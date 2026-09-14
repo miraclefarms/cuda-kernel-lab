@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "bench/csv.hpp"
+#include "bench/stream.cuh"
 #include "bench/timing.cuh"
 
 namespace {
@@ -59,7 +60,9 @@ bool verify(const std::vector<float>& got, const std::vector<float>& b, const st
 }  // namespace
 
 int main(int argc, char** argv) {
-  size_t n = 1u << 26;  // 64 Mi elements -> 768 MiB touched, comfortably past L2
+  // Derived from the shared buffer size rather than written out, so a kernel's
+  // numbers and bench-probe's ceiling always describe the same working set.
+  size_t n = bench::kStreamBufferBytes / sizeof(float);
   int warmup = 5;
   int samples = 50;
   int batch = 20;

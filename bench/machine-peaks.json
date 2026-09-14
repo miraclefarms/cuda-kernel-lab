@@ -1,0 +1,44 @@
+{
+  "_comment": [
+    "Single source of truth for utilization denominators. Kept in sync with",
+    "docs/environment-matrix.md — that file explains the numbers, this one is",
+    "what tools/plot.py reads, so a figure can never disagree with the doc.",
+    "",
+    "bw_theoretical_gbps: vendor/derived peak. Answers 'how far from the hardware'.",
+    "bw_ceiling_*_gbps:   best of read/copy/write from bench-probe on that machine,",
+    "                     measured with the same cold/hot discipline as the kernels.",
+    "                     Answers 'how far from a well-written trivial kernel'.",
+    "                     null until bench-probe has been run there.",
+    "Compare like with like: cold numbers against bw_ceiling_cold_gbps, hot against hot."
+  ],
+  "a100": {
+    "name": "A100 80GB SXM4",
+    "cc": "8.0",
+    "sm_count": 108,
+    "bw_theoretical_gbps": 2039,
+    "bw_ceiling_cold_gbps": null,
+    "bw_ceiling_hot_gbps": null,
+    "bf16_tflops": 312,
+    "fp8_tflops": null
+  },
+  "h20": {
+    "name": "H20 141GB HBM3e SXM",
+    "cc": "9.0",
+    "sm_count": 78,
+    "bw_theoretical_gbps": 4814,
+    "bw_ceiling_cold_gbps": null,
+    "bw_ceiling_hot_gbps": null,
+    "bf16_tflops": 148,
+    "fp8_tflops": 296
+  },
+  "h200": {
+    "name": "H200 141GB SXM",
+    "cc": "9.0",
+    "sm_count": 132,
+    "bw_theoretical_gbps": 4800,
+    "bw_ceiling_cold_gbps": null,
+    "bw_ceiling_hot_gbps": null,
+    "bf16_tflops": 989,
+    "fp8_tflops": 1979
+  }
+}

@@ -5,7 +5,7 @@
 - **第一部分：厂商标称基线**——公开 datasheet 数字，三台卡共用同一套口径，**是所有文章
   计算「达成率」的分母**。这部分是固定的，不随机器变化。
 - **第二部分：本机实测环境**——每台机器真实的驱动、toolkit、时钟、权限状态，由
-  `tools/env_capture.sh` 采集后填入。这部分决定某篇文章的数字能说到多硬。
+  `tools/preflight.sh --matrix` 采集后填入。这部分决定某篇文章的数字能说到多硬。
 
 ## 第一部分：厂商标称基线（公开 datasheet）
 
@@ -79,7 +79,7 @@ Ridge point = 峰值算力 ÷ 峰值带宽，单位 FLOP/byte。一个 kernel �
 
 ## 第二部分：本机实测环境
 
-每台机器第一次跑实验前用 `tools/env_capture.sh` 填一次，驱动或 toolkit 变更后重填。
+每台机器第一次跑实验前用 `tools/preflight.sh --matrix` 填一次，驱动或 toolkit 变更后重填。
 只记型号与版本，不记主机名、IP、集群路径、用户名。
 
 ### a100 — A100 80GB SXM4 (`sm_80`)
@@ -104,7 +104,7 @@ Ridge point = 峰值算力 ÷ 峰值带宽，单位 FLOP/byte。一个 kernel �
 | CUDA Toolkit | 13.3.73（V13.3.73）|
 | 容器镜像 | 未使用（裸机，无 docker）|
 | bench-probe 输出 | cc 9.0；SM 78；L2 60 MiB；显存 139.8 GiB；memory bus 6016 bit；memory clock 3201 MHz；SM clock 1980 MHz；smem/SM 228 KiB；默认功耗上限 500 W |
-| 实测 HBM 带宽 / 标称 | read 3852 / copy 3870 / write 4012 GB/s（标称 4814，80–83%；`bench-probe` 256 MiB 工作集）|
+| 实测 streaming 上限 / 标称 | ⚠ **需重测**。旧值 read 3852 / copy 3870 / write 4012 GB/s （标称 4814，80–83%）来自 `bench-probe` 自建的计时循环，未 flush L2 且未走 `measure_cold/hot`，被 `00-template` 的 4113 GB/s 超出 6%，不能当分母。`bench-probe` 已改为与 kernel 同一套纪律，重跑后回填此处与 `bench/machine-peaks.json` |
 | 锁频权限 | ✅ root 可锁（`nvidia-smi -lgc` 实测成功，测完已 `-rgc`）|
 | ncu 计数器权限 | ✅ root 可采（`ncu` 2026.2.1 实测通过）|
 | MIG | Disabled（8 卡均未切分）|

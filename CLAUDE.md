@@ -55,7 +55,7 @@ python3 tools/check_confidential.py --staged # 提交前
 
 - **没锁频就不报绝对 TFLOPS**。拿不到 `nvidia-smi -lgc` 权限时，结论一律用「同一次会话内的相对比值」表述，并在 CSV 里记录实际 SM 时钟。
 - **一律报分位数**（min / p10 / median / p90），不报均值。机器不独占时尤其如此。
-- **每次运行必须记录环境**：机器代号、GPU 型号、compute capability、驱动版本、CUDA toolkit 版本、SM/内存实际时钟、MIG 状态、是否独占、ECC 状态。`tools/env_capture.sh` 负责采集。
+- **每次运行必须记录环境**：机器代号、GPU 型号、compute capability、驱动版本、CUDA toolkit 版本、SM/内存实际时钟、MIG 状态、是否独占、ECC 状态。`tools/run.py` 每次运行自动采集；换机器时先跑 `tools/preflight.sh`。
 - **冷热两种口径分开报**：cold（每次 L2 flush + 单次启动）与 hot（CUDA Graph 内多次重放）。混在一起的数字没有意义。
 - **跑不出预期收益就如实记录**。这个系列的核心资产是失效边界，负结果与正结果同等重要，不调参凑结论。
 
@@ -66,7 +66,8 @@ bench/       harness：计时、L2 flush、设备探测、CSV 输出
 kernels/     每篇一个目录 {NN}-{slug}/，baseline 与 optimized 并列
 results/     CSV 原始数据，按 {NN}-{slug}/{date}-{machine}.csv
 figures/     由 CSV 生成的 PNG
-tools/       run.py / plot.py / env_capture.sh / check_confidential.py
+tools/       preflight.sh / run.py / plot.py / check_confidential.py
+.agents/skills/  kernel-experiment（数据生产闭环）、kernel-debug（排查手册）
 docs/        接口约定、环境矩阵、测量方法论、容器、复现说明
 docker/      复现容器：Dockerfile（digest 固定）+ run.sh
 ```
@@ -76,6 +77,21 @@ docker/      复现容器：Dockerfile（digest 固定）+ run.sh
 ## 接口约定
 
 `docs/interface-contract.md` 定义四项跨篇接口：tile 描述符构造、pipeline 深度参数化、accumulator 布局、epilogue 回调签名。**这四项对齐了，S4 的 capstone 才拼得起来。** 改动它们需要同步检查所有已有 kernel。
+
+## 换机器时先跑预检
+
+```bash
+./tools/preflight.sh --matrix
+```
+
+退出码非 0 表示有 BLOCK 项（驱动 < 580、MIG 开启、缺 nvcc），**在它通过之前不要采集任何
+数据**。WARN 项不阻塞，但决定这次数据能说什么：没锁频不报绝对 TFLOPS，非独占只报分位数，
+没有 ncu 就不给计数器证据。
+
+## Skill
+
+- `kernel-experiment` —— 一篇文章的数据生产闭环（预检 → 建目录 → 写码 → 三机编译 → 扫参 → CSV → 图 → 回填 → 提交）
+- `kernel-debug` —— 数字可疑时的固定排查顺序
 
 ## 常用命令
 
@@ -87,7 +103,7 @@ cmake -B build -DCMAKE_CUDA_ARCHITECTURES=90a   # H20 / H200；A100 用 80
 cmake --build build -j
 ./build/bench/bench-probe                       # 设备基线画像
 python3 tools/run.py --kernel 00-template --machine h200
-python3 tools/plot.py results/00-template/*.csv -o figures/00-template/
+python3 tools/plot.py results/00-template/*.csv -o figures/00-template/  # 延迟 + 带宽两种视图
 python3 tools/check_confidential.py
 ```
 
