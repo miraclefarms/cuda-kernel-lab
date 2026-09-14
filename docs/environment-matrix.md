@@ -102,7 +102,7 @@ Ridge point = 峰值算力 ÷ 峰值带宽，单位 FLOP/byte。一个 kernel �
 | CUDA Toolkit | 13.3.73（V13.3.73）|
 | 容器镜像 | 未使用（裸机，无 docker）|
 | bench-probe 输出 | cc 9.0；SM 78；L2 60 MiB；显存 139.8 GiB；memory bus 6016 bit；memory clock 3201 MHz；SM clock 1980 MHz；smem/SM 228 KiB；默认功耗上限 500 W |
-| 实测 HBM 带宽 / 标称 | 待填（跑 streaming kernel 后回填）|
+| 实测 HBM 带宽 / 标称 | read 3852 / copy 3870 / write 4012 GB/s（标称 4814，80–83%；`bench-probe` 256 MiB 工作集）|
 | 锁频权限 | ✅ root 可锁（`nvidia-smi -lgc` 实测成功，测完已 `-rgc`）|
 | ncu 计数器权限 | ✅ root 可采（`ncu` 2026.2.1 实测通过）|
 | MIG | Disabled（8 卡均未切分）|
