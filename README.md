@@ -10,14 +10,18 @@ CUDA 13 语言特性与硬件优化系列的代码与实验仓库。
 
 系列的核心主张是「一个优化在什么条件下反而更慢」。要证明这件事，需要的不是一台最强的卡，而是**算力带宽比拉开差距的一组卡**：
 
-| 代号 | GPU | 架构 | BF16 dense | 带宽 | Ridge point |
-|------|-----|------|-----------|------|-------------|
-| `a100` | A100 80GB | `sm_80` Ampere | 312 TFLOPS | 2.0 TB/s | ≈156 FLOP/B |
-| `h20` | H20 96GB | `sm_90a` Hopper | 148 TFLOPS | 4.0 TB/s | **≈37 FLOP/B** |
-| `h200` | H200 141GB | `sm_90a` Hopper | ≈989 TFLOPS | 4.8 TB/s | **≈206 FLOP/B** |
+| 代号 | GPU | 架构 | SM | BF16 dense | 带宽 | Ridge point |
+|------|-----|------|----|-----------|------|-------------|
+| `a100` | A100 80GB SXM4 | `sm_80` Ampere | 108 | 312 TFLOPS | 2.039 TB/s | 153 FLOP/B |
+| `h20` | H20 96GB SXM | `sm_90a` Hopper | 78 | 148 TFLOPS | 4.0 TB/s | **37 FLOP/B** |
+| `h200` | H200 141GB SXM | `sm_90a` Hopper | 132 | 989 TFLOPS | 4.8 TB/s | **206 FLOP/B** |
+
+全部按 SXM / dense（非 2:4 稀疏）口径。完整基线表、特性可用性矩阵与来源见
+[docs/environment-matrix.md](docs/environment-matrix.md)。
 
 - `a100` 没有 TMA、cluster、`wgmma`、FP8，是「新硬件特性之前你必须怎么写」的对照组。
 - `h20` 与 `h200` **同一套 ISA、同一份二进制**，算力差 6.7 倍，ridge point 差 5.6 倍。同一个优化在这两台上的收益可以反号——这是本仓库最有价值的实验条件。
+- `a100` 的 ridge point（153）反而比 `h20`（37）高。算力弱不等于更容易撞带宽——`h20` 是「带宽超配、算力阉割」的特例，而这恰恰是国内大量实际部署所用的卡。
 
 > 本仓库目前没有 Blackwell / Rubin 硬件。涉及 tcgen05、TMEM、CTA pair、NVFP4 的内容在文章里明确标注为「未实测·规格推演」，本仓库不提供对应代码。
 
@@ -35,16 +39,25 @@ CUDA 13 语言特性与硬件优化系列的代码与实验仓库。
 
 ## 快速开始
 
-需要 CUDA Toolkit 13.x 与一块 Ampere 或更新的 GPU。
+推荐走容器：宿主机只需要 NVIDIA 驱动（**≥ 580.65.06**，CUDA 13.x 的最低要求）和
+NVIDIA Container Toolkit，其余全在镜像里。
 
 ```bash
-cmake -B build -DCMAKE_CUDA_ARCHITECTURES=90a   # H20 / H200；A100 用 80
-cmake --build build -j
-
-./build/bench/bench-probe                        # 打印本机基线画像
-python3 tools/run.py --kernel 00-template --machine h200
-python3 tools/plot.py results/00-template/*.csv -o figures/00-template/
+docker build -t cuda-kernel-lab:13.3.1 docker/
+./docker/run.sh bash -lc '
+  cmake -B build -DCMAKE_CUDA_ARCHITECTURES=90a &&   # A100 用 80
+  cmake --build build -j &&
+  ./build/bench/bench-probe &&
+  python3 tools/run.py --kernel 00-template --machine h200 &&
+  python3 tools/plot.py results/00-template/*.csv -o figures/00-template/
+'
 ```
+
+镜像按 digest 固定在 `nvidia/cuda:13.3.1-devel-ubuntu24.04`，另装了 Nsight Compute、
+CMake 与出图用的 matplotlib。细节与 ncu 权限说明见 [docs/container.md](docs/container.md)。
+
+不用容器也可以，本机装 CUDA Toolkit 13.x + CMake ≥ 3.24 + Python 3.10 后直接跑同样的
+cmake / python 命令即可。
 
 ## 测量口径
 
@@ -62,6 +75,7 @@ python3 tools/plot.py results/00-template/*.csv -o figures/00-template/
 - [docs/measurement-methodology.md](docs/measurement-methodology.md) — 测量方法与 CSV schema
 - [docs/interface-contract.md](docs/interface-contract.md) — 跨篇复用的四项接口约定
 - [docs/environment-matrix.md](docs/environment-matrix.md) — 三台机器的环境记录
+- [docs/container.md](docs/container.md) — 复现容器与宿主机前提
 - [docs/reproduce.md](docs/reproduce.md) — 复现步骤与常见坑
 
 ## License

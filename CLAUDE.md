@@ -45,7 +45,9 @@ python3 tools/check_confidential.py --staged # 提交前
 
 受限关键词清单放在 `tools/confidential-patterns.json`，**不入版本控制**（`tools/confidential-patterns.example.json` 是形状示例）。原因是：一份「什么名字绝对不能出现」的公开清单，本身就泄漏了存在哪些保密材料。
 
-同样禁止进入本仓库：机器主机名、IP、用户名、SSH 配置、集群路径、任何凭据。机器在数据里只用 `a100` / `h20` / `h200` 这种代号。
+**明确允许**：NVIDIA 公开发布的产品型号及其官方标称参数——A100、H20、H100、H200、B200、GB200、RTX PRO 6000 等，以及它们 datasheet 上的算力、带宽、显存、SM 数、TDP。这些是公开可引用的事实，是本系列建立统一对比基线的前提，**必须写清楚**。含糊其辞地写「某张 Hopper 卡」反而让数据不可比。
+
+禁止的是**机器身份**：主机名、IP、用户名、SSH 配置、集群路径、任何凭据。数据里的 `machine` 列用 `a100` / `h20` / `h200`——这是型号代号，不是机器代号，同型号的不同机器不做区分。
 
 ## 测量纪律
 
@@ -65,7 +67,8 @@ kernels/     每篇一个目录 {NN}-{slug}/，baseline 与 optimized 并列
 results/     CSV 原始数据，按 {NN}-{slug}/{date}-{machine}.csv
 figures/     由 CSV 生成的 PNG
 tools/       run.py / plot.py / env_capture.sh / check_confidential.py
-docs/        接口约定、环境矩阵、测量方法论、复现说明
+docs/        接口约定、环境矩阵、测量方法论、容器、复现说明
+docker/      复现容器：Dockerfile（digest 固定）+ run.sh
 ```
 
 `{NN}` 是文章篇号（01–19），`{slug}` 是该篇的英文短名。目录名一旦建立不再改，因为文章里的 permalink 指向它。
@@ -77,6 +80,9 @@ docs/        接口约定、环境矩阵、测量方法论、复现说明
 ## 常用命令
 
 ```bash
+docker build -t cuda-kernel-lab:13.3.1 docker/  # 复现容器，见 docs/container.md
+./docker/run.sh                                 # 进容器（宿主机驱动需 >= 580.65.06）
+
 cmake -B build -DCMAKE_CUDA_ARCHITECTURES=90a   # H20 / H200；A100 用 80
 cmake --build build -j
 ./build/bench/bench-probe                       # 设备基线画像

@@ -10,7 +10,11 @@
     "",
     "block: patterns that are a compliance incident on their own (product",
     "designators that appear only in confidential material).",
-    "warn:  patterns that need a human look (bare vendor names, host identity)."
+    "warn:  patterns that need a human look (bare vendor names, host identity).",
+    "",
+    "Do NOT add publicly documented NVIDIA product names (A100, H20, H100, H200,",
+    "B200, GB200, ...) to either list. They are public facts and this project",
+    "depends on naming them precisely to keep results comparable."
   ],
   "block": [
     { "re": "\\bEXAMPLE-?\\d{3}\\b", "flags": "i", "label": "example product designator" }

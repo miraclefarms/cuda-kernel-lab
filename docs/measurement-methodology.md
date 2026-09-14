@@ -52,9 +52,16 @@
 `achieved_gbps, achieved_tflops` —— 均按 median 计算。
 
 约定：
-- `machine` 只用代号 `a100` / `h20` / `h200`，不写主机名、IP、集群路径
+- `machine` 用 GPU 型号代号 `a100` / `h20` / `h200`。**型号必须写准**——它是查
+  `docs/environment-matrix.md` 基线表的键，达成率的分母由它决定。不写主机名、IP、
+  集群路径、用户名；同型号的不同机器不做区分
 - `bytes` 是一次调用搬运的总字节数（读 + 写），不适用时填 0
 - `git_dirty=yes` 的数据不得进文章。文章引用的必须是干净树上的 commit
+
+## 达成率的分母
+
+带宽利用率、算力利用率一律以 `docs/environment-matrix.md` 第一部分的**厂商标称 dense
+峰值**为分母，不用实测峰值，也不用稀疏数字。三台机器共用同一套口径，跨机比较才成立。
 
 ## 文件命名
 

@@ -2,7 +2,13 @@
 
 ## 前置
 
+**推荐用容器**，见 [container.md](container.md)——宿主机只需要驱动 ≥ 580.65.06 与
+NVIDIA Container Toolkit，工具链版本与文章完全一致。
+
+裸机路线的话需要：
+
 - CUDA Toolkit 13.x（`nvcc --version` 确认）
+- 驱动 ≥ 580.65.06
 - CMake ≥ 3.24
 - Python 3.10+，出图需要 `matplotlib`
 - Ampere 或更新的 GPU
@@ -44,6 +50,8 @@ sudo nvidia-smi -rgc
 - **ncu 报权限错误** → 需要 root 或 `NVreg_RestrictProfilingToAdminUsers=0`。
   拿不到就在文章里声明本篇无计数器证据。
 - **`git_dirty=yes`** → 这份数据不能进文章。提交干净后重跑。
+- **容器起不来 / `nvidia-smi` 在容器里报错** → 先查宿主机驱动版本。低于 580.65.06 时
+  CUDA 13 容器无法运行，这不是配置问题，是硬前提。
 
 ## 跑出了不同结论
 
