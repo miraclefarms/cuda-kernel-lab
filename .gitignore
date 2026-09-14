@@ -1,0 +1,12 @@
+build/
+cmake-build-*/
+*.o
+*.so
+*.ncu-rep
+*.nsys-rep
+*.sqlite
+__pycache__/
+.venv/
+.DS_Store
+.env
+tools/confidential-patterns.json

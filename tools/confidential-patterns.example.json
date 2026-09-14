@@ -1,0 +1,22 @@
+{
+  "_comment": [
+    "Keyword list for tools/check_confidential.py.",
+    "",
+    "Copy to tools/confidential-patterns.json (gitignored) and fill in the real",
+    "entries. The specific designators live outside version control on purpose:",
+    "a published list of what must never be named is itself a disclosure of what",
+    "confidential material exists. The gate still works for anyone who clones —",
+    "they just supply their own list.",
+    "",
+    "block: patterns that are a compliance incident on their own (product",
+    "designators that appear only in confidential material).",
+    "warn:  patterns that need a human look (bare vendor names, host identity)."
+  ],
+  "block": [
+    { "re": "\\bEXAMPLE-?\\d{3}\\b", "flags": "i", "label": "example product designator" }
+  ],
+  "warn": [
+    { "re": "\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b", "flags": "", "label": "IP address" },
+    { "re": "\\bssh\\s+[\\w.-]+@[\\w.-]+", "flags": "", "label": "ssh target" }
+  ]
+}
