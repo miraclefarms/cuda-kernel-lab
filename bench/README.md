@@ -5,7 +5,8 @@
 
 - `include/bench/timing.cuh` — `measure_cold` / `measure_hot` 两种口径、L2 flush、分位数统计
 - `include/bench/csv.hpp` — 测量侧 CSV schema（环境列由 `tools/run.py` 补齐）
-- `src/probe_main.cu` — `bench-probe`，打印本机基线画像
+- `src/probe_main.cu` — `bench-probe`，打印本机基线画像，并实测 streaming
+  带宽（read / copy / write）与标称值对比
 
 ## 为什么分 cold / hot
 
