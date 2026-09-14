@@ -14,19 +14,19 @@
 
 | | **a100** | **h20** | **h200** |
 |---|---|---|---|
-| 全称 | A100 80GB SXM4 | H20 96GB SXM | H200 141GB SXM |
+| 全称 | A100 80GB SXM4 | H20 141GB HBM3e SXM | H200 141GB SXM |
 | 架构 | Ampere | Hopper | Hopper |
 | Compute capability | `sm_80` | `sm_90a` | `sm_90a` |
 | SM 数 | 108 | 78 | 132 |
-| 显存 | 80 GB HBM2e | 96 GB HBM3 | 141 GB HBM3e |
-| **显存带宽** | **2.039 TB/s** | **4.0 TB/s** | **4.8 TB/s** |
+| 显存 | 80 GB HBM2e | 141 GB HBM3e | 141 GB HBM3e |
+| **显存带宽** | **2.039 TB/s** | **4.8 TB/s** | **4.8 TB/s** |
 | FP64 (vector) | 9.7 TFLOPS | **1 TFLOPS** | 34 TFLOPS |
 | FP64 Tensor | 19.5 TFLOPS | — | 67 TFLOPS |
 | FP32 | 19.5 TFLOPS | 44 TFLOPS | 67 TFLOPS |
 | TF32 Tensor | 156 TFLOPS | 74 TFLOPS | 495 TFLOPS |
 | **BF16/FP16 Tensor** | **312 TFLOPS** | **148 TFLOPS** | **989 TFLOPS** |
 | **FP8 Tensor** | 不支持 | **296 TFLOPS** | **1979 TFLOPS** |
-| TDP | 400 W | 400 W | 700 W |
+| TDP | 400 W | 500 W | 700 W |
 
 ### 由基线导出的三个关键比值
 
@@ -35,10 +35,10 @@ Ridge point = 峰值算力 ÷ 峰值带宽，单位 FLOP/byte。一个 kernel �
 
 | Ridge point | a100 | h20 | h200 |
 |---|---|---|---|
-| BF16 | 153 | **37** | 206 |
-| FP8 | — | 74 | 412 |
+| BF16 | 153 | **31** | 206 |
+| FP8 | — | 62 | 412 |
 
-- **h20 与 h200 同为 `sm_90a`，ridge point 差 5.6 倍。** 同一份二进制、同一套 ISA，
+- **h20 与 h200 同为 `sm_90a`，ridge point 差 6.6 倍。** 同一份二进制、同一套 ISA，
   在 h20 上该做的是喂满 4.0 TB/s，在 h200 上该做的是把 989 TFLOPS 填满。同一个优化
   收益反号的实验条件就来自这里。
 - **a100 的 ridge point 反而比 h20 高。** 算力弱不等于更容易受带宽限制——h20 是
@@ -65,8 +65,10 @@ Ridge point = 峰值算力 ÷ 峰值带宽，单位 FLOP/byte。一个 kernel �
 
 - A100 datasheet — https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/a100/pdf/nvidia-a100-datasheet-us-nvidia-1758950-r4-web.pdf
 - H200 datasheet — https://www.nvidia.com/en-us/data-center/h200/
-- H20 参数为公开报道与经销商 spec sheet 汇总，NVIDIA 未发布面向全球的正式 datasheet；
-  首次上机后用 `bench-probe` 与实测带宽复核，若与本表冲突以实测为准并在此注明。
+- H20 参数为公开报道与经销商 spec sheet 汇总，NVIDIA 未发布面向全球的正式 datasheet。
+  本系列实测为 **141GB HBM3e 版本**：`bench-probe` 报 memory bus 6016 bit、
+  memory clock 3201 MHz，导出理论带宽 4814 GB/s，与 4.8 TB/s 标称一致；SM 78、
+  L2 60 MiB。96GB HBM3 版本（4.0 TB/s）不用于本系列。
 
 > L2 容量、实际 boost 时钟、SMEM/SM 等由 `bench-probe` 在真机上读取，不在此表预填——
 > 猜一个数字进基线表，比留空危险得多。
@@ -92,22 +94,22 @@ Ridge point = 峰值算力 ÷ 峰值带宽，单位 FLOP/byte。一个 kernel �
 | MIG | 待确认 |
 | 独占 | 待确认 |
 
-### h20 — H20 96GB SXM (`sm_90a`)
+### h20 — H20 141GB HBM3e SXM (`sm_90a`)
 
 | 项 | 值 |
 |----|-----|
-| 驱动版本 | 待填 |
-| CUDA Toolkit | 待填 |
-| 容器镜像 | 待填 |
-| bench-probe 输出 | 待填 |
-| 实测 HBM 带宽 / 标称 | 待填 |
-| 锁频权限 | 待确认 |
-| ncu 计数器权限 | 待确认 |
-| MIG | **待确认（H20 常被切分，必须确认跑在整卡上）** |
-| 独占 | 待确认 |
+| 驱动版本 | 590.44.01 |
+| CUDA Toolkit | 13.3.73（V13.3.73）|
+| 容器镜像 | 未使用（裸机，无 docker）|
+| bench-probe 输出 | cc 9.0；SM 78；L2 60 MiB；显存 139.8 GiB；memory bus 6016 bit；memory clock 3201 MHz；SM clock 1980 MHz；smem/SM 228 KiB；默认功耗上限 500 W |
+| 实测 HBM 带宽 / 标称 | 待填（跑 streaming kernel 后回填）|
+| 锁频权限 | ✅ root 可锁（`nvidia-smi -lgc` 实测成功，测完已 `-rgc`）|
+| ncu 计数器权限 | ✅ root 可采（`ncu` 2026.2.1 实测通过）|
+| MIG | Disabled（8 卡均未切分）|
+| 独占 | 8 卡整机，型号 `H20-3e`；跑分时须确认无其他进程占用目标卡 |
 
-> 注意：H20 另有 141GB HBM3e 版本（带宽 4.8 TB/s）。上机第一件事是确认手上这台是
-> 96GB HBM3 还是 141GB HBM3e——两者 ridge point 不同，基线表要对应调整。
+> 本机为 **141GB HBM3e 版本**（带宽 4.8 TB/s），不是 96GB HBM3（4.0 TB/s）。
+> 基线表与 ridge point 已按此口径记录。8 张卡同型号，数据列一律记 `h20`。
 
 ### h200 — H200 141GB SXM (`sm_90a`)
 
@@ -128,6 +130,13 @@ Ridge point = 峰值算力 ÷ 峰值带宽，单位 FLOP/byte。一个 kernel �
 ## 四个阻塞项
 
 任何一条不成立，第 03 篇的测量口径就得改。**开工第一件事就是验证它们。**
+
+h20 上的实测状态（2026-09-14）：
+
+1. **驱动版本 ≥ 580.65.06** — ✅ 590.44.01。
+2. **ncu 计数器权限** — ✅ root 下 `ncu` 2026.2.1 可采。
+3. **锁频权限** — ✅ root 下 `nvidia-smi -lgc` 可锁，故可报绝对 TFLOPS。
+4. **MIG 与独占状态** — MIG Disabled；8 卡整机但非独占保证，跑分前需确认目标卡空闲。
 
 1. **驱动版本 ≥ 580.65.06** — CUDA 13.x 的最低驱动要求。远程集群常年跑 535/550/570，
    驱动不够则本项目的容器起不来，CUDA 13 特性全部不可用。这是唯一一个可能直接否掉

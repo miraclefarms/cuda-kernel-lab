@@ -13,15 +13,15 @@ CUDA 13 语言特性与硬件优化系列的代码与实验仓库。
 | 代号 | GPU | 架构 | SM | BF16 dense | 带宽 | Ridge point |
 |------|-----|------|----|-----------|------|-------------|
 | `a100` | A100 80GB SXM4 | `sm_80` Ampere | 108 | 312 TFLOPS | 2.039 TB/s | 153 FLOP/B |
-| `h20` | H20 96GB SXM | `sm_90a` Hopper | 78 | 148 TFLOPS | 4.0 TB/s | **37 FLOP/B** |
+| `h20` | H20 141GB HBM3e SXM | `sm_90a` Hopper | 78 | 148 TFLOPS | 4.8 TB/s | **31 FLOP/B** |
 | `h200` | H200 141GB SXM | `sm_90a` Hopper | 132 | 989 TFLOPS | 4.8 TB/s | **206 FLOP/B** |
 
 全部按 SXM / dense（非 2:4 稀疏）口径。完整基线表、特性可用性矩阵与来源见
 [docs/environment-matrix.md](docs/environment-matrix.md)。
 
 - `a100` 没有 TMA、cluster、`wgmma`、FP8，是「新硬件特性之前你必须怎么写」的对照组。
-- `h20` 与 `h200` **同一套 ISA、同一份二进制**，算力差 6.7 倍，ridge point 差 5.6 倍。同一个优化在这两台上的收益可以反号——这是本仓库最有价值的实验条件。
-- `a100` 的 ridge point（153）反而比 `h20`（37）高。算力弱不等于更容易撞带宽——`h20` 是「带宽超配、算力阉割」的特例，而这恰恰是国内大量实际部署所用的卡。
+- `h20` 与 `h200` **同一套 ISA、同一份二进制**，算力差 6.7 倍，ridge point 差 6.6 倍。同一个优化在这两台上的收益可以反号——这是本仓库最有价值的实验条件。
+- `a100` 的 ridge point（153）反而比 `h20`（31）高。算力弱不等于更容易撞带宽——`h20` 是「带宽超配、算力阉割」的特例，而这恰恰是国内大量实际部署所用的卡。
 
 > 本仓库目前没有 Blackwell / Rubin 硬件。涉及 tcgen05、TMEM、CTA pair、NVFP4 的内容在文章里明确标注为「未实测·规格推演」，本仓库不提供对应代码。
 
