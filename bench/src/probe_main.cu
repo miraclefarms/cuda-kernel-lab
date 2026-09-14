@@ -14,9 +14,19 @@ namespace {
 // Peak FLOP/s is not queryable, so ridge point is computed from measured-ish
 // theoretical bandwidth and a caller-supplied peak. Anything we cannot verify on
 // device is left to the article, not fabricated here.
-double theoretical_gbps(const cudaDeviceProp& p) {
-  // memoryClockRate is in kHz, memoryBusWidth in bits, DDR -> x2.
-  return 2.0 * static_cast<double>(p.memoryClockRate) * 1e3 *
+//
+// CUDA 13 removed clockRate / memoryClockRate / computeMode from cudaDeviceProp;
+// they are only reachable through cudaDeviceGetAttribute now.
+int device_attr(cudaDeviceAttr attr, int device) {
+  int value = 0;
+  BENCH_CHECK(cudaDeviceGetAttribute(&value, attr, device));
+  return value;
+}
+
+double theoretical_gbps(const cudaDeviceProp& p, int device) {
+  // Memory clock is in kHz, bus width in bits, DDR -> x2.
+  const int mem_khz = device_attr(cudaDevAttrMemoryClockRate, device);
+  return 2.0 * static_cast<double>(mem_khz) * 1e3 *
          (static_cast<double>(p.memoryBusWidth) / 8.0) / 1e9;
 }
 
@@ -53,14 +63,15 @@ int main(int argc, char** argv) {
   print_kv("global memory (GiB)",
            static_cast<double>(p.totalGlobalMem) / (1024.0 * 1024.0 * 1024.0));
   print_kv("memory bus (bit)", static_cast<long long>(p.memoryBusWidth));
-  print_kv("theoretical BW (GB/s)", theoretical_gbps(p));
-  print_kv("clock rate (MHz)", static_cast<double>(p.clockRate) / 1e3);
-  print_kv("memory clock (MHz)", static_cast<double>(p.memoryClockRate) / 1e3);
+  print_kv("theoretical BW (GB/s)", theoretical_gbps(p, device));
+  print_kv("clock rate (MHz)", static_cast<double>(device_attr(cudaDevAttrClockRate, device)) / 1e3);
+  print_kv("memory clock (MHz)",
+           static_cast<double>(device_attr(cudaDevAttrMemoryClockRate, device)) / 1e3);
   print_kv("cooperative launch", static_cast<long long>(p.cooperativeLaunch));
   print_kv("async engine count", static_cast<long long>(p.asyncEngineCount));
   print_kv("unified addressing", static_cast<long long>(p.unifiedAddressing));
   print_kv("ECC enabled", static_cast<long long>(p.ECCEnabled));
-  print_kv("compute mode", static_cast<long long>(p.computeMode));
+  print_kv("compute mode", static_cast<long long>(device_attr(cudaDevAttrComputeMode, device)));
 
   // Feature gates this series actually cares about. cc >= 9.0 is the line where
   // TMA, thread block clusters, DSMEM and wgmma appear.
