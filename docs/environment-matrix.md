@@ -103,8 +103,8 @@ Ridge point = 峰值算力 ÷ 峰值带宽，单位 FLOP/byte。一个 kernel �
 | 驱动版本 | 590.44.01 |
 | CUDA Toolkit | 13.3.73（V13.3.73）|
 | 容器镜像 | 未使用（裸机，无 docker）|
-| bench-probe 输出 | cc 9.0；SM 78；L2 60 MiB；显存 139.8 GiB；memory bus 6016 bit；memory clock 3201 MHz；SM clock 1980 MHz；smem/SM 228 KiB；默认功耗上限 500 W |
-| 实测 streaming 上限 / 标称 | ⚠ **需重测**。旧值 read 3852 / copy 3870 / write 4012 GB/s （标称 4814，80–83%）来自 `bench-probe` 自建的计时循环，未 flush L2 且未走 `measure_cold/hot`，被 `00-template` 的 4113 GB/s 超出 6%，不能当分母。`bench-probe` 已改为与 kernel 同一套纪律，重跑后回填此处与 `bench/machine-peaks.json` |
+| bench-probe 输出 | cc 9.0；SM 78；max threads/SM 2048；regs/SM 65536；L2 60 MiB；显存 139.8 GiB；memory bus 6016 bit；memory clock 3201 MHz；SM clock 1980 MHz；smem/SM 228 KiB；默认功耗上限 500 W |
+| 实测 streaming 上限 / 标称 | best cold **4046.6** / best hot **4306.3** GB/s（read 3317.6 / 3954.2，copy 3775.7 / 3928.8，write 4046.6 / 4306.3，格式 cold / hot）；标称 4814 → 84.1% / 89.5%。2026-09-14 采于**非独占**机器（8×vLLM worker 常驻）且**未锁频**，按纪律只作同会话相对比值，绝对达成率仅供参考。见 `results/01-execution-model/2026-09-14-h20.csv`（commit `dfa8153`）|
 | 锁频权限 | ✅ root 可锁（`nvidia-smi -lgc` 实测成功，测完已 `-rgc`）|
 | ncu 计数器权限 | ✅ root 可采（`ncu` 2026.2.1 实测通过）|
 | MIG | Disabled（8 卡均未切分）|

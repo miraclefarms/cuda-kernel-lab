@@ -30,19 +30,32 @@
 
 ## 实验数据
 
-**待采集。** 需在 a100 / h20 / h200 三台各跑一次 `bench-probe`，把 best cold/hot 回填
-`bench/machine-peaks.json` 与该机器在 `docs/environment-matrix.md` 第二部分的小节。
+来源 `results/01-execution-model/2026-09-14-h20.csv`（h20，256 MiB 缓冲，同一 cold/hot 口径）。
+**本轮只有 h20**，a100 / h200 待接入；且采样时机器非独占（8×vLLM worker 常驻）、未锁频，
+按纪律这里只作同会话相对比值，绝对达成率仅供参考。标称带宽 4814 GB/s。
 
-| 机器 | 实测 streaming 上限（cold / hot）| 标称带宽 | 状态 |
-|---|---|---|---|
-| a100 | — | 2039 GB/s | 待测 |
-| h20 | — | 4814 GB/s | 需重测（旧值未 flush L2、口径不一致）|
-| h200 | — | 4800 GB/s | 待测 |
+| 口径 | variant | median ms | achieved GB/s | % 标称 |
+|---|---|---|---|---|
+| cold | read | 0.0809 | 3317.6 | 68.9% |
+| cold | copy | 0.1422 | 3775.7 | 78.4% |
+| cold | write | 0.0663 | 4046.6 | 84.1% |
+| hot | read | 0.0679 | 3954.2 | 82.1% |
+| hot | copy | 0.1367 | 3928.8 | 81.6% |
+| hot | write | 0.0623 | 4306.3 | 89.4% |
+
+best cold 4046.6 / best hot 4306.3 GB/s，已回填 `bench/machine-peaks.json` 与
+`docs/environment-matrix.md`。结论：H20 单次 HBM 流量上限约为标称的 84%（cold）到 89%
+（hot）；hot 普遍高于 cold，说明启动开销与冷缓存仍占一部分。读的达成率最低（69%），
+受限于 read 的累加依赖与指令发射，不是带宽本身。
+
+尚未完成的部分：a100 / h200 的对应测量，用于兑现「三机 ridge point 差 6.6×」的论证。
 
 ## 截图
 
-**待生成。** 三机跑完后按同一口径出「标称峰值 vs 实测 streaming 天花板」对比图，放入
-`figures/01-execution-model/` 并在此嵌入。
+![cold latency](../../figures/01-execution-model/fig-01-execution-model-cold-latency.png)
+![cold bandwidth](../../figures/01-execution-model/fig-01-execution-model-cold-bandwidth.png)
+![hot latency](../../figures/01-execution-model/fig-01-execution-model-hot-latency.png)
+![hot bandwidth](../../figures/01-execution-model/fig-01-execution-model-hot-bandwidth.png)
 
 ## 复现
 

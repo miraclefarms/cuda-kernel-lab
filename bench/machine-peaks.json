@@ -26,8 +26,8 @@
     "cc": "9.0",
     "sm_count": 78,
     "bw_theoretical_gbps": 4814,
-    "bw_ceiling_cold_gbps": null,
-    "bw_ceiling_hot_gbps": null,
+    "bw_ceiling_cold_gbps": 4046.6,
+    "bw_ceiling_hot_gbps": 4306.3,
     "bf16_tflops": 148,
     "fp8_tflops": 296
   },
