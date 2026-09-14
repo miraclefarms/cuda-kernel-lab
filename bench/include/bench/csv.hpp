@@ -2,6 +2,11 @@
 
 // Measurement-side CSV emission.
 //
+// 测量侧 CSV 输出。二进制只负责写它确知的东西：跑了什么、耗时多久。
+// 环境列（机器代号、驱动、toolkit、实际时钟、MIG、是否独占、git commit）由
+// tools/run.py 读取 nvidia-smi/git 后前置拼上。这样拆分的意义是：kernel 二进制
+// 永远不会报告自己没验证过的环境。
+//
 // The binary emits only what it can know for certain: what it ran and how long
 // it took. Environment columns (machine, driver, toolkit, actual clocks, MIG,
 // exclusivity, git commit) are prepended by tools/run.py, which can read nvidia-smi
@@ -9,6 +14,7 @@
 // environment it did not actually verify.
 //
 // Schema is fixed. tools/plot.py and docs/measurement-methodology.md depend on it.
+// 列定义固定，tools/plot.py 与 docs/measurement-methodology.md 依赖它。
 
 #include <cstdio>
 #include <string>
@@ -17,14 +23,15 @@
 
 namespace bench {
 
+// 一行 CSV 记录：描述一次「变体 × 口径 × 形状」的测量。
 struct RunRow {
-  std::string kernel;   // e.g. "00-template"
-  std::string variant;  // "baseline" | "optimized" | free-form
+  std::string kernel;   // 篇号 slug，如 "00-template"
+  std::string variant;  // "baseline" | "optimized" | 自由命名
   std::string mode;     // "cold" | "hot"
-  std::string shape;    // e.g. "n=67108864"
-  std::string dtype;    // e.g. "fp32"
-  double bytes = 0.0;   // bytes moved by one invocation, 0 if not applicable
-  double flops = 0.0;   // flops performed by one invocation, 0 if not applicable
+  std::string shape;    // 问题规模，如 "n=67108864"
+  std::string dtype;    // 数据类型，如 "fp32"
+  double bytes = 0.0;   // 单次调用搬动的字节数，不适用时为 0
+  double flops = 0.0;   // 单次调用完成的浮点运算数，不适用时为 0
   Stats stats;
 };
 
