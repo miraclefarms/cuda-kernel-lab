@@ -12,9 +12,11 @@ import argparse
 import csv
 import datetime as dt
 import io
+import os
 import pathlib
 import subprocess
 import sys
+import threading
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
@@ -44,10 +46,61 @@ def sh(cmd: list[str]) -> str:
         return ""
 
 
-def capture_env(machine: str, clocks_locked: bool) -> dict[str, str]:
+def gpu_index() -> str:
+    """Physical GPU index used by the benchmark's logical device 0.
+
+    The binary calls cudaSetDevice(0); under CUDA_VISIBLE_DEVICES that maps to the
+    first visible physical GPU, not necessarily physical 0. Querying with -i is what
+    keeps a multi-GPU host from folding every other card into one CSV field.
+    """
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")[0].strip()
+    return visible if visible.isdigit() else "0"
+
+
+def nvidia_query(query: str) -> str:
+    return sh(["nvidia-smi", "-i", gpu_index(), f"--query-gpu={query}",
+               "--format=csv,noheader,nounits"])
+
+
+class ClockSampler:
+    """Poll the SM clock while the benchmark runs and keep its peak.
+
+    A clock read after the process exits reports the idle value, which is not the
+    clock the kernel ran at — the whole point of recording it. Sampling has to
+    happen concurrently with the run.
+    """
+
+    def __init__(self, interval_s: float = 0.05) -> None:
+        self._interval = interval_s
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self.samples: list[int] = []
+
+    def __enter__(self) -> "ClockSampler":
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join()
+
+    def _loop(self) -> None:
+        while not self._stop.is_set():
+            value = nvidia_query("clocks.sm")
+            if value.isdigit():
+                self.samples.append(int(value))
+            self._stop.wait(self._interval)
+
+    def peak(self) -> str:
+        return str(max(self.samples)) if self.samples else ""
+
+
+def capture_env(machine: str, clocks_locked: bool, sm_clock: str = "") -> dict[str, str]:
     query = "name,driver_version,clocks.sm,clocks.mem,compute_mode,ecc.mode.current,mig.mode.current"
-    raw = sh(["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader,nounits"])
-    parts = [p.strip() for p in raw.split(",")] if raw else [""] * 7
+    raw = nvidia_query(query).splitlines()
+    parts = [p.strip() for p in raw[0].split(",")] if raw else [""] * 7
     parts += [""] * (7 - len(parts))
 
     nvcc = sh(["nvcc", "--version"])
@@ -60,7 +113,7 @@ def capture_env(machine: str, clocks_locked: bool) -> dict[str, str]:
         "machine": machine,
         "gpu_name": parts[0],
         "driver": parts[1],
-        "sm_clock_mhz": parts[2],
+        "sm_clock_mhz": sm_clock or parts[2],
         "mem_clock_mhz": parts[3],
         "compute_mode": parts[4],
         "ecc": parts[5],
@@ -103,12 +156,13 @@ def main() -> int:
         return 1
 
     forwarded = args.rest[1:] if args.rest and args.rest[0] == "--" else args.rest
-    proc = subprocess.run([str(binary), *forwarded], capture_output=True, text=True)
+    with ClockSampler() as sampler:
+        proc = subprocess.run([str(binary), *forwarded], capture_output=True, text=True)
     if proc.returncode != 0:
         sys.stderr.write(proc.stderr)
         return proc.returncode
 
-    env = capture_env(args.machine, args.clocks_locked)
+    env = capture_env(args.machine, args.clocks_locked, sampler.peak())
     if not args.clocks_locked:
         print("[warn] clocks not locked — report relative ratios, not absolute TFLOPS",
               file=sys.stderr)
