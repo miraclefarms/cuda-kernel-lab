@@ -19,6 +19,13 @@ honest limitation is that a co-tenant which starts and stops entirely inside the
 RUN window is not observable, because we deliberately do not sample during RUN.
 That caveat is emitted in the report rather than papered over.
 
+Before POST sampling starts, the gate waits a settle period (--post-settle).
+nvidia-smi reports utilization.gpu as an average over the driver's last sampling
+interval, so sampling the instant the task exits reads the task's own kernel tail
+as a co-tenant: on an A100 with a 575 driver the first POST sample showed 55%
+that decayed to 0% within a second. Draining that window first is what keeps a
+clean run from being marked invalid.
+
 Exit codes:
     0  pass
     1  task itself failed (GPU window was clean)
@@ -210,6 +217,11 @@ def run_pre(args: argparse.Namespace) -> tuple[list[int] | None, list[dict]]:
 
 def run_post(args: argparse.Namespace,
              selected: list[int]) -> tuple[bool, list[dict], float]:
+    # Let the driver's utilization averaging window drain the task's own kernel
+    # tail before judging POST; otherwise the first sample reads the benchmark we
+    # just ran as a co-tenant. This is a settle delay, not part of the window.
+    if args.post_settle > 0:
+        time.sleep(args.post_settle)
     tracker = QuietTracker(selected, args.tolerance)
     log: list[dict] = []
     start = time.monotonic()
@@ -265,6 +277,7 @@ def base_report(args: argparse.Namespace, cmd: list[str]) -> dict:
         "interval_s": args.interval,
         "quiet_window_s": args.quiet_window,
         "post_window_s": args.post_window,
+        "post_settle_s": args.post_settle,
         "max_wait_s": args.max_wait,
         "tolerance_pct": args.tolerance,
         "need": args.need,
@@ -441,6 +454,10 @@ def main() -> int:
                     help="give up on PRE after this many seconds (default 1800)")
     ap.add_argument("--post-timeout", dest="post_timeout", type=float, default=300.0,
                     help="give up on POST after this many seconds (default 300)")
+    ap.add_argument("--post-settle", dest="post_settle", type=float, default=5.0,
+                    help="seconds to wait after the task exits before POST sampling, "
+                         "so the driver's utilization average drains the task's own "
+                         "kernel tail (default 5)")
     ap.add_argument("--tolerance", type=int, default=0,
                     help="largest utilization.gpu still counted as idle (default 0)")
     ap.add_argument("--csv", default=None,
