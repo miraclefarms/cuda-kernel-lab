@@ -4,12 +4,19 @@
 Figures are generated from data, never drawn by hand. If a chart cannot be
 produced by this script from a committed CSV, it does not belong in a post.
 
-Two views:
+Three views:
   latency   — median ms with p10-p90 error bars. Always available.
   bandwidth — achieved GB/s against two reference lines: theoretical peak and
               the measured streaming ceiling from bench/machine-peaks.json.
               For a bandwidth-bound kernel this is the view that carries the
               argument; raw latency hides how much of the machine is left.
+  sweep     — for kernels that emit several shapes per variant (a parameter
+              sweep). One figure per mode, one panel per machine, x = shape,
+              one line per variant. --metric gbps (with reference lines) or
+              speedup (relative to --baseline, same machine/mode/shape — the
+              form to use when clocks were not locked). The bar views cannot
+              show a sweep: they would keep one arbitrary shape per variant, so
+              the script switches to this view automatically when it sees one.
 
 Style: Nature/Science journal conventions, applied uniformly so every figure
 in the series reads as one visual system.
@@ -198,6 +205,108 @@ def plot_bandwidth(rows, mode: str, out: pathlib.Path, peaks: dict) -> None:
     save(fig, out)
 
 
+def parse_shape(shape: str) -> dict[str, str]:
+    out = {}
+    for tok in shape.split(";"):
+        k, _, v = tok.partition("=")
+        out[k] = v
+    return out
+
+
+def is_sweep(rows) -> bool:
+    shapes: dict[tuple, set] = defaultdict(set)
+    for r in rows:
+        shapes[(r["machine"], r["variant"], r["mode"])].add(r["shape"])
+    return any(len(v) > 1 for v in shapes.values())
+
+
+def shape_labels(rows, keys: list[str] | None) -> dict[str, str]:
+    """Short x tick labels: only the shape tokens that actually vary."""
+    shapes = list(dict.fromkeys(r["shape"] for r in rows))
+    parsed = {s: parse_shape(s) for s in shapes}
+    if not keys:
+        all_keys = list(dict.fromkeys(k for p in parsed.values() for k in p))
+        keys = [k for k in all_keys if len({p.get(k) for p in parsed.values()}) > 1]
+    return {s: "\n".join(f"{k}={parsed[s].get(k, '')}" for k in keys) or s for s in shapes}
+
+
+def plot_sweep(rows, mode: str, out: pathlib.Path, peaks: dict, metric: str,
+               baseline: str | None, keys: list[str] | None) -> None:
+    rows = [r for r in rows if r.get("mode") == mode]
+    if not rows:
+        return
+    machines = sorted({r["machine"] for r in rows})
+    shapes = list(dict.fromkeys(r["shape"] for r in rows))
+    labels = shape_labels(rows, keys)
+    variants = ordered_variants({"_": {r["variant"]: None for r in rows}})
+    if metric == "speedup":
+        if not baseline or baseline not in variants:
+            print(f"[warn] sweep speedup needs --baseline present in the data; skipping {mode}")
+            return
+    styles = variant_style(variants)
+    by = {(r["machine"], r["variant"], r["shape"]): r for r in rows}
+
+    fig, axes = plt.subplots(1, len(machines), figsize=(3.6 * len(machines) + 1.6, 3.8),
+                             dpi=200, squeeze=False)
+    for ax, machine in zip(axes[0], machines):
+        for variant in variants:
+            xs, ys, lo, hi = [], [], [], []
+            for i, shape in enumerate(shapes):
+                r = by.get((machine, variant, shape))
+                if not r:
+                    continue
+                med, p10, p90 = (float(r[k]) for k in ("median_ms", "p10_ms", "p90_ms"))
+                if med <= 0:
+                    continue
+                if metric == "gbps":
+                    b = float(r["bytes"])
+                    if b <= 0:
+                        continue
+                    # bytes / time: the p90 latency is the low end of the bandwidth band.
+                    y, ylo, yhi = (b / (t / 1e3) / 1e9 for t in (med, p90, p10))
+                else:
+                    ref = by.get((machine, baseline, shape))
+                    if not ref:
+                        continue
+                    base = float(ref["median_ms"])
+                    y, ylo, yhi = base / med, base / p90, base / p10
+                xs.append(i)
+                ys.append(y)
+                lo.append(max(y - ylo, 0.0))
+                hi.append(max(yhi - y, 0.0))
+            if not xs:
+                continue
+            st = styles[variant]
+            ax.errorbar(xs, ys, yerr=[lo, hi], label=variant, color=st["color"],
+                        marker=st["marker"], linestyle=st["linestyle"], markersize=3.5,
+                        linewidth=1.0, capsize=1.5, elinewidth=0.6, zorder=3)
+        if metric == "gbps":
+            peak = peaks.get(machine) or {}
+            for key, ls, label in (("bw_theoretical_gbps", "--", "theoretical peak"),
+                                   (f"bw_ceiling_{mode}_gbps", ":", f"streaming ceiling ({mode})")):
+                if peak.get(key):
+                    ax.axhline(peak[key], color=INK, linestyle=ls, linewidth=0.9, label=label,
+                               zorder=2)
+            ax.set_ylim(bottom=0)
+        else:
+            ax.axhline(1.0, color=INK, linestyle="--", linewidth=0.9, zorder=2,
+                       label=f"{baseline} = 1")
+        ax.set_title(machine)
+        ax.set_xticks(range(len(shapes)))
+        ax.set_xticklabels([labels[s] for s in shapes], fontsize=6, rotation=0)
+        ax.minorticks_off()
+        ax.set_xlim(-0.5, len(shapes) - 0.5)
+    axes[0][0].set_ylabel("Achieved bandwidth (GB/s)" if metric == "gbps"
+                          else f"Speedup vs {baseline} (median)")
+    kernel = rows[0].get("kernel", "")
+    fig.suptitle(f"{kernel} — {mode} — sweep", fontsize=10, fontweight="semibold")
+    axes[0][-1].legend(loc="center left", bbox_to_anchor=(1.02, 0.5), borderaxespad=0.0,
+                       handlelength=2.2, labelspacing=0.7)
+    fig.text(0.99, 0.0, "error bars: p10–p90", ha="right", va="bottom", fontsize=6.5,
+             color="#666666")
+    save(fig, out)
+
+
 def save(fig, out: pathlib.Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, bbox_inches="tight", facecolor="white", dpi=200)
@@ -209,7 +318,13 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("csv", nargs="+", type=pathlib.Path)
     ap.add_argument("-o", "--out-dir", type=pathlib.Path, required=True)
-    ap.add_argument("--view", choices=["latency", "bandwidth", "both"], default="both")
+    ap.add_argument("--view", choices=["latency", "bandwidth", "both", "sweep"], default="both")
+    ap.add_argument("--metric", choices=["gbps", "speedup"], default="gbps",
+                    help="sweep view only")
+    ap.add_argument("--baseline", default=None, help="sweep speedup: reference variant")
+    ap.add_argument("--x-keys", default=None,
+                    help="sweep view: comma-separated shape keys for x labels "
+                         "(default: the keys that vary)")
     args = ap.parse_args()
 
     apply_style()
@@ -224,10 +339,22 @@ def main() -> int:
     if missing:
         print(f"[warn] no entry in machine-peaks.json for: {', '.join(missing)}")
 
+    view = args.view
+    if view != "sweep" and is_sweep(rows):
+        print("[warn] several shapes per variant: bar views would drop all but one; "
+              "using --view sweep")
+        view = "sweep"
+    keys = args.x_keys.split(",") if args.x_keys else None
+
     for mode in ("cold", "hot"):
-        if args.view in ("latency", "both"):
+        if view == "sweep":
+            suffix = "sweep" if args.metric == "gbps" else f"speedup-vs-{args.baseline}"
+            plot_sweep(rows, mode, args.out_dir / f"fig-{kernel}-{mode}-{suffix}.png", peaks,
+                       args.metric, args.baseline, keys)
+            continue
+        if view in ("latency", "both"):
             plot_latency(rows, mode, args.out_dir / f"fig-{kernel}-{mode}-latency.png")
-        if args.view in ("bandwidth", "both"):
+        if view in ("bandwidth", "both"):
             plot_bandwidth(rows, mode, args.out_dir / f"fig-{kernel}-{mode}-bandwidth.png", peaks)
     return 0
 

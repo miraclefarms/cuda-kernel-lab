@@ -39,8 +39,18 @@ OKABE_ITO = ["#0072B2", "#D55E00", "#009E73", "#E69F00", "#56B4E9", "#CC79A7"]
 # result reads cleanly, later ones get progressively different patterns.
 HATCHES = ["", "///", "...", "xxx", "|||", "+++"]
 
+# Redundant marker + dash per series index for line charts (sweep view), for the
+# same reason bars get hatches: never distinguish series by color alone.
+MARKERS = ["o", "s", "^", "D", "v", "P"]
+LINESTYLES = ["-", "--", "-.", ":", (0, (5, 1)), (0, (3, 1, 1, 1))]
+
 # Stable series order, so a chart does not reshuffle when a row is added.
-VARIANT_ORDER = ["read", "copy", "write", "baseline", "optimized"]
+# New names are appended, never inserted, so existing figures keep their colors.
+VARIANT_ORDER = ["read", "copy", "write", "baseline", "optimized",
+                 # 02-measurement-discipline: wrong protocols first, the right one last
+                 "wallclock", "no-flush", "batched", "disciplined",
+                 # 03-smem-staging
+                 "global", "sync-stage", "cp-async-wait", "cp-async"]
 
 
 def apply_style() -> None:
@@ -81,14 +91,16 @@ def apply_style() -> None:
     })
 
 
-def series_style(index: int) -> dict[str, str]:
-    """Color + hatch for the index-th series, wrapping if there are many."""
+def series_style(index: int) -> dict:
+    """Color + hatch (bars) + marker/linestyle (lines) for the index-th series."""
     return {
         "color": OKABE_ITO[index % len(OKABE_ITO)],
         "hatch": HATCHES[index % len(HATCHES)],
+        "marker": MARKERS[index % len(MARKERS)],
+        "linestyle": LINESTYLES[index % len(LINESTYLES)],
     }
 
 
-def variant_style(variants: list[str]) -> dict[str, dict[str, str]]:
+def variant_style(variants: list[str]) -> dict[str, dict]:
     """Map each variant name to its stable color + hatch by declared order."""
     return {v: series_style(i) for i, v in enumerate(variants)}

@@ -12,13 +12,14 @@ description: cuda-kernel-lab 的统一绘图规范——所有配图的配色、
 | 文件 | 角色 |
 |------|------|
 | `tools/plot_style.py` | **配色与样式的唯一真源**：Okabe-Ito 色盲安全调色板、斜纹冗余编码、字体与 rcParams。禁止在别处重声明颜色、字体、刻度、hatch |
-| `tools/plot.py` | 标准渲染器：读 `results/{NN}-{slug}/*.csv`，产出四张图（cold/hot × latency/bandwidth） |
+| `tools/plot.py` | 标准渲染器：读 `results/{NN}-{slug}/*.csv`，产出四张图（cold/hot × latency/bandwidth）；参数扫描类数据改出 sweep 线图（cold/hot 各一张，每机器一个子图） |
 
 ```bash
 python3 tools/plot.py results/{NN}-{slug}/*.csv -o figures/{NN}-{slug}/
 ```
 
 - 带宽受限篇目看 `-bandwidth.png`（带理论峰值与 streaming 天花板参考线），算力受限看 `-latency.png`
+- 一个变体有多个 shape（扫描）时用 `--view sweep`（脚本检测到会自动切换）：`--metric gbps` 带参考线，`--metric speedup --baseline <variant>` 画相对比值（未锁频时用这个）
 - 改动 `tools/plot_style.py` 后**必须重跑所有已存在的图**，否则系列内风格不一致
 
 ## 风格是什么（改样式前先读）
@@ -32,7 +33,7 @@ python3 tools/plot.py results/{NN}-{slug}/*.csv -o figures/{NN}-{slug}/
 ## 新增一类图 / 新增一个篇目图
 
 1. **不新建调色逻辑**：`from plot_style import apply_style, variant_style`，绘制前 `apply_style()`
-2. 画柱/线时用 `variant_style(variants)` 返回的 `color` 与 `hatch` 成对赋值
+2. 画柱时用 `variant_style(variants)` 返回的 `color` 与 `hatch` 成对赋值；画线时用 `color` + `marker` + `linestyle`，同样不只靠颜色区分
 3. 参考线、误差棒用 `INK`；误差棒口径固定 p10–p90，图上注明
 4. 新篇目出图后，把图嵌进 `kernels/{NN}-{slug}/README.md` 的「截图」节（相对路径 `../../figures/{NN}-{slug}/...`）
 

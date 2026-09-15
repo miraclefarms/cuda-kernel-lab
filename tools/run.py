@@ -171,6 +171,9 @@ def main() -> int:
     ap.add_argument("--clocks-locked", action="store_true",
                     help="pass only if you actually ran nvidia-smi -lgc")
     ap.add_argument("--out-dir", default=None)
+    ap.add_argument("--tag", default=None,
+                    help="suffix for a second run on the same day and machine, e.g. "
+                         "'unlocked' -> {date}-{machine}-unlocked.csv")
     ap.add_argument("rest", nargs=argparse.REMAINDER, help="args forwarded to the binary")
     args = ap.parse_args()
 
@@ -205,7 +208,8 @@ def main() -> int:
 
     out_dir = pathlib.Path(args.out_dir) if args.out_dir else REPO / "results" / args.kernel
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{dt.date.today().isoformat()}-{args.machine}.csv"
+    stem = f"{dt.date.today().isoformat()}-{args.machine}"
+    out_path = out_dir / (f"{stem}-{args.tag}.csv" if args.tag else f"{stem}.csv")
 
     fieldnames = ENV_FIELDS + list(rows[0].keys()) + DERIVED_FIELDS
     with out_path.open("w", newline="") as fh:
