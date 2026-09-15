@@ -99,6 +99,8 @@ python3 tools/plot.py results/{NN}-{slug}/*.csv -o figures/{NN}-{slug}/
 
 带宽受限的篇目看 `-bandwidth.png`（带理论峰值与 streaming 天花板参考线），算力受限看 `-latency.png`。图一律由 CSV 生成，**不手画**。
 
+配色与样式的唯一真源是 `tools/plot_style.py`（Nature/Science 期刊风 + Okabe-Ito 色盲安全调色板 + 斜纹冗余编码），完整规范见 `figure-style` skill。**不要在任何 kernel 目录里自建颜色或 matplotlib 样式**；新增图类型也要 import `plot_style`。改了样式必须重跑所有已存在的图。
+
 ## 回填（四处，缺一不可）
 
 1. **`kernels/{NN}-{slug}/README.md`** 的「实验数据」与「截图」两节：从 CSV 抄关键行成表，嵌入生成的图

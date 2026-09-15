@@ -25,7 +25,7 @@ MiracleFarms「CUDA 13 语言特性与硬件优化」系列文章的**代码与�
 
 1. **代码**：`kernels/{NN}-{slug}/` 下 `baseline` 与 `optimized` 并列，可编译可运行（第 01 篇是基线画像，只有画像工具、无 optimized，见该目录 README），并附一份 `README.md` 覆盖代码、要测什么、所用技术、实验数据与截图
 2. **数据**：`results/{NN}-{slug}/{date}-{machine}.csv`，schema 见 `docs/measurement-methodology.md`，**每台跑过的机器一份**
-3. **配图**：`figures/{NN}-{slug}/*.png`，由 `tools/plot.py` 从 CSV 生成，**不手画**
+3. **配图**：`figures/{NN}-{slug}/*.png`，由 `tools/plot.py` 从 CSV 生成，**不手画**；样式真源 `tools/plot_style.py`（见 `figure-style` skill）
 4. **pin 信息**：commit hash、机器列表、toolkit/驱动版本、CSV 路径——回填进 content repo 的 `private-workspace/projects/cuda-kernel-series/lab-pin.yaml`
 
 配图同步到 content repo 的 `assets/{post-slug}/`；**CSV 留在本仓库**，private repo 不囤实验数据。
@@ -68,8 +68,8 @@ bench/       共用 harness：计时、L2 flush、stream 上限、CSV schema。�
 kernels/     每篇一个目录 {NN}-{slug}/，baseline 与 optimized 并列
 results/     CSV 原始数据，按 {NN}-{slug}/{date}-{machine}.csv
 figures/     由 CSV 生成的 PNG
-tools/       preflight.sh / run.py / plot.py / check_confidential.py（共用）
-.agents/skills/  kernel-experiment（数据生产闭环）、kernel-debug（排查手册）
+tools/       preflight.sh / run.py / plot.py / plot_style.py / check_confidential.py（共用）
+.agents/skills/  kernel-experiment（数据生产闭环）、kernel-debug（排查手册）、figure-style（绘图规范）
 docs/        接口约定、环境矩阵、测量方法论、容器、复现说明
 docker/      复现容器：Dockerfile（digest 固定）+ run.sh
 ```
@@ -118,6 +118,7 @@ TFLOPS，没有 ncu 就不给计数器证据。进程数不是判据——常驻
 
 - `kernel-experiment` —— 一篇文章的数据生产闭环（预检 → 建目录 → 写码 → 三机编译 → 扫参 → CSV → 图 → 回填 → 提交）
 - `kernel-debug` —— 数字可疑时的固定排查顺序
+- `figure-style` —— 统一绘图规范与配色模板；配图相关请求走这里（唯一真源 `tools/plot_style.py`）
 
 ## 常用命令
 
