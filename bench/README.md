@@ -7,7 +7,7 @@
 「删掉某一篇文章后它还该不该存在」。`bench-probe` 属于第 01 篇，已移到
 `kernels/01-execution-model/`。
 
-- `include/bench/timing.cuh` — `measure_cold` / `measure_hot` 两种口径、L2 flush、分位数统计
+- `include/bench/timing.cuh` — `measure_cold` / `measure_hot` 两种口径、L2 flush、分位数统计；可选输出逐样本原始耗时（不改变统计口径）
 - `include/bench/csv.hpp` — 测量侧 CSV schema（环境列由 `tools/run.py` 补齐）
 - `include/bench/stream.cuh`、`src/stream.cu` — streaming 上限测量（read / copy / write）
 - `machine-peaks.json` — 达成率分母，由第 01 篇的 `bench-probe` 回填

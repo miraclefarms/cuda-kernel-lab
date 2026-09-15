@@ -112,8 +112,13 @@ class L2Flusher {
 //
 // body 只能在传入的 stream 上入队工作，不能做同步、不能分配内存；
 // 否则事件计时会被算进去，测量结果失真。
+// `raw`（可选）接收每个样本的原始毫秒数，供需要展示分布本身的篇目使用（第 02 篇
+// 用它对比均值与分位数）；统计口径不受影响。
+// `raw` (optional) receives every per-sample millisecond value, for posts that need
+// to show the distribution itself; the returned Stats are unaffected.
 template <typename Body>
-Stats measure_cold(Body&& body, int warmup, int samples, cudaStream_t stream, int device = 0) {
+Stats measure_cold(Body&& body, int warmup, int samples, cudaStream_t stream, int device = 0,
+                   std::vector<double>* raw = nullptr) {
   L2Flusher flusher(device);
 
   cudaEvent_t start{};
@@ -140,13 +145,15 @@ Stats measure_cold(Body&& body, int warmup, int samples, cudaStream_t stream, in
 
   BENCH_CHECK(cudaEventDestroy(start));
   BENCH_CHECK(cudaEventDestroy(stop));
+  if (raw != nullptr) *raw = ms;
   return summarize(std::move(ms));
 }
 
 // 热路径：把同一个 body 连续入队 batch 次录成 CUDA graph，再整图重放。
 // 这样 launch 开销和 host 侧抖动被 batch 次分摊，得到的是稳态的单次耗时。
 template <typename Body>
-Stats measure_hot(Body&& body, int warmup, int samples, int batch, cudaStream_t stream) {
+Stats measure_hot(Body&& body, int warmup, int samples, int batch, cudaStream_t stream,
+                  std::vector<double>* raw = nullptr) {
   for (int i = 0; i < warmup; ++i) body(stream);
   BENCH_CHECK(cudaStreamSynchronize(stream));
 
@@ -184,6 +191,7 @@ Stats measure_hot(Body&& body, int warmup, int samples, int batch, cudaStream_t 
   BENCH_CHECK(cudaEventDestroy(stop));
   BENCH_CHECK(cudaGraphExecDestroy(exec));
   BENCH_CHECK(cudaGraphDestroy(graph));
+  if (raw != nullptr) *raw = ms;
   return summarize(std::move(ms));
 }
 
