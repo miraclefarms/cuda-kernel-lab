@@ -35,9 +35,9 @@
     "name": "H200 141GB SXM",
     "cc": "9.0",
     "sm_count": 132,
-    "bw_theoretical_gbps": 4800,
-    "bw_ceiling_cold_gbps": null,
-    "bw_ceiling_hot_gbps": null,
+    "bw_theoretical_gbps": 4814,
+    "bw_ceiling_cold_gbps": 4111.1,
+    "bw_ceiling_hot_gbps": 4398.1,
     "bf16_tflops": 989,
     "fp8_tflops": 1979
   }
