@@ -18,8 +18,8 @@
 | # | 主题 | 实验机器 | 新零件 | 建议目录 | 状态 |
 |---|------|---------|--------|---------|------|
 | 01 | 三台机器不是三块显卡，是三种约束 | 三机（静态）| 环境基线 + occupancy 扫描 | `01-execution-model` | 已建 |
-| 02 | 一个可信的数字需要多少纪律 | 三机 | bench harness 定稿 | `02-measurement-discipline` | — |
-| 03 | 搬运范式的分水岭：`cp.async` | 三机 | SMEM staging 模板 | `03-smem-staging` | — |
+| 02 | 一个可信的数字需要多少纪律 | 三机 | bench harness 定稿 | `02-measurement-discipline` | 已建 |
+| 03 | 搬运范式的分水岭：`cp.async` | 三机 | SMEM staging 模板 | `03-smem-staging` | 已建 |
 | 04 | TMA：把地址计算交给硬件 | H20/H200（A100 对照）| TMA 描述符封装（约定 #1）| `04-tma` | — |
 | 05 | mbarrier 与流水线深度 | H20/H200 | 多级 pipeline 模板（约定 #2）| `05-mbarrier-pipeline` | — |
 | 06 | Warp specialization：让线程分工 | H20/H200 | WS kernel 骨架 | `06-warp-specialization` | — |

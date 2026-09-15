@@ -154,6 +154,20 @@ forward-compat 路径，而不是怀疑数据来源。**用了 compat 的会话�
 `results/{NN}-{slug}/{YYYY-MM-DD}-{machine}.csv`，每台机器一份，不合并。
 合并是出图脚本的事，不是采集的事。
 
+同一天同一台机器需要第二份对照（例如锁频 vs 不锁频）时，用 `tools/run.py --tag <name>`，
+产出 `{YYYY-MM-DD}-{machine}-{name}.csv`，两份都保留。
+
+需要逐样本原始耗时的篇目（第 02 篇展示均值与分位数的差异）由二进制另写
+`{YYYY-MM-DD}-{machine}-samples.csv`，列为 `kernel, variant, mode, shape, sample, ms`。它没有
+环境列，靠同日同机器的主 CSV 对应；主 CSV 作废时它一并作废。
+
+## 扫描类数据的出图
+
+一个变体在多个 shape 上各有一行（参数扫描）时，`tools/plot.py` 的柱状图视图只能留下其中一个
+shape，因此脚本检测到扫描会自动改用 `--view sweep`：每个口径一张图、每台机器一个子图、横轴
+shape、每个变体一条线。锁不了频时用 `--metric speedup --baseline <variant>` 画同机器、同口径、
+同 shape 下相对 baseline 的比值，这正是「只报相对比值」的呈现方式。
+
 ## 负结果
 
 跑不出预期收益就照实记。这个系列的核心资产是失效边界，负结果与正结果同等重要。

@@ -30,8 +30,8 @@ CUDA 13 语言特性与硬件优化系列的代码与实验仓库。
 | # | 主题 | 代码 | 文章 |
 |---|------|------|------|
 | 01 | 执行模型与三机基线画像 | `kernels/01-execution-model/` | 待发布 |
-| 02 | 可信 microbenchmark 方法论 | `bench/` | 待发布 |
-| 03 | 内存层级与搬运范式（`cp.async`）| — | 待发布 |
+| 02 | 可信 microbenchmark 方法论 | `kernels/02-measurement-discipline/`、`bench/` | 待发布 |
+| 03 | 内存层级与搬运范式（`cp.async`）| `kernels/03-smem-staging/` | 待发布 |
 | 04–08 | 异步与流水线（TMA / mbarrier / warp specialization / cluster / PDL）| — | 待发布 |
 | 09–13 | 张量核心（`mma.sync` → `wgmma` → FP8 → epilogue → 代际推演）| — | 待发布 |
 | 14–17 | 编程模型上移（CuTe / CUTLASS / cuTile / 四路对照）| — | 待发布 |
