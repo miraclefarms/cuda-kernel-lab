@@ -70,7 +70,7 @@ results/     CSV 原始数据，按 {NN}-{slug}/{date}-{machine}.csv
 figures/     由 CSV 生成的 PNG
 tools/       preflight.sh / run.py / plot.py / plot_style.py / check_confidential.py（共用）
 .agents/skills/  kernel-experiment（数据生产闭环）、kernel-debug（排查手册）、figure-style（绘图规范）
-docs/        接口约定、环境矩阵、测量方法论、容器、复现说明
+docs/        系列提纲、接口约定、环境矩阵、测量方法论、容器、复现说明
 docker/      复现容器：Dockerfile（digest 固定）+ run.sh
 ```
 
@@ -98,6 +98,10 @@ docker/      复现容器：Dockerfile（digest 固定）+ run.sh
 - **复现**：build / run / plot 三条命令
 
 形状以 `kernels/00-template/README.md` 为准。数据与截图两节必须随实验回填，不能把「待采集」留到开写。
+
+## 系列提纲
+
+`docs/series-outline.md` 是每篇 kernel 的需求来源：主张、实验、零件、建议目录名、未决事项。**开一篇之前先读对应小节**，实验设计按它来；与提纲不一致的实现要么改代码，要么先改提纲。它同步自文章仓库的大纲，只保留代码侧内容——大纲调整时两边一起改。
 
 ## 接口约定
 

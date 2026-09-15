@@ -10,9 +10,10 @@ description: 在 cuda-kernel-lab 里为某一篇文章生产代码与实验数�
 ## 读取入口
 
 1. 本仓库 `CLAUDE.md`（边界与纪律）
-2. `docs/measurement-methodology.md`（口径与 CSV schema）
-3. `bench/machine-peaks.json`（达成率分母）
-4. `docs/interface-contract.md`（四项跨篇接口）
+2. `docs/series-outline.md` 中该篇小节（主张、实验、零件、建议目录名；先查「未决事项」是否影响篇号）
+3. `docs/measurement-methodology.md`（口径与 CSV schema）
+4. `bench/machine-peaks.json`（达成率分母）
+5. `docs/interface-contract.md`（四项跨篇接口）
 
 ## 第 0 步：预检，不可跳过
 

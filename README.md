@@ -37,6 +37,8 @@ CUDA 13 语言特性与硬件优化系列的代码与实验仓库。
 | 14–17 | 编程模型上移（CuTe / CUTLASS / cuTile / 四路对照）| — | 待发布 |
 | 18–19 | Capstone | `capstone/` | 待发布 |
 
+每篇的主张、实验设计与零件见 [docs/series-outline.md](docs/series-outline.md)。篇序仍有未决项（02/03 顺序），以该文件「未决事项」为准。
+
 ## 快速开始
 
 推荐走容器：宿主机只需要 NVIDIA 驱动（**≥ 580.65.06**，CUDA 13.x 的最低要求）和
@@ -71,6 +73,7 @@ cmake / python 命令即可。
 
 ## 文档
 
+- [docs/series-outline.md](docs/series-outline.md) — 全系列 19 篇提纲：每篇的主张、实验、零件与建议目录
 - [docs/measurement-methodology.md](docs/measurement-methodology.md) — 测量方法与 CSV schema
 - [docs/interface-contract.md](docs/interface-contract.md) — 跨篇复用的四项接口约定
 - [docs/environment-matrix.md](docs/environment-matrix.md) — 三台机器的环境记录
