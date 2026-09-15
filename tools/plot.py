@@ -22,6 +22,9 @@ in the series reads as one visual system.
     never distinguished by color alone (Color Universal Design).
   * value labels printed directly on the data; legend moved outside the axes
     so it can never overlap the bars or the reference lines.
+
+The palette, fonts and rcParams live in tools/plot_style.py — do not redeclare
+them here. Workflow and rules: .agents/skills/figure-style/SKILL.md.
 """
 
 from __future__ import annotations
@@ -37,65 +40,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+from plot_style import INK, VARIANT_ORDER, apply_style, variant_style  # noqa: E402
+
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PEAKS_PATH = REPO / "bench" / "machine-peaks.json"
-
-INK = "#1a1a1a"
-
-# Okabe-Ito colorblind-safe qualitative palette.
-# blue, vermilion, bluish green, orange, sky blue, reddish purple.
-OKABE_ITO = ["#0072B2", "#D55E00", "#009E73", "#E69F00", "#56B4E9", "#CC79A7"]
-
-# Redundant hatch per series index: the first series stays solid so the primary
-# result reads cleanly, later ones get progressively different patterns.
-HATCHES = ["", "///", "...", "xxx", "|||", "+++"]
-
-# Stable series order, so a chart does not reshuffle when a row is added.
-VARIANT_ORDER = ["read", "copy", "write", "baseline", "optimized"]
-
-
-def apply_style() -> None:
-    plt.rcParams.update({
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Helvetica", "Arial", "Nimbus Sans", "DejaVu Sans"],
-        "font.size": 9,
-        "axes.titlesize": 10,
-        "axes.titleweight": "semibold",
-        "axes.labelsize": 9,
-        "axes.linewidth": 0.8,
-        "axes.edgecolor": INK,
-        "axes.labelcolor": INK,
-        "axes.facecolor": "white",
-        "figure.facecolor": "white",
-        "savefig.facecolor": "white",
-        "text.color": INK,
-        "xtick.color": INK,
-        "ytick.color": INK,
-        "xtick.direction": "in",
-        "ytick.direction": "in",
-        "xtick.top": True,
-        "ytick.right": True,
-        "xtick.major.width": 0.8,
-        "ytick.major.width": 0.8,
-        "xtick.major.size": 3.5,
-        "ytick.major.size": 3.5,
-        "xtick.minor.visible": True,
-        "ytick.minor.visible": True,
-        "xtick.minor.width": 0.5,
-        "ytick.minor.width": 0.5,
-        "xtick.minor.size": 1.8,
-        "ytick.minor.size": 1.8,
-        "legend.frameon": False,
-        "legend.fontsize": 8,
-        "hatch.linewidth": 0.6,
-    })
-
-
-def variant_style(variants: list[str]) -> dict[str, dict[str, str]]:
-    return {
-        v: {"color": OKABE_ITO[i % len(OKABE_ITO)], "hatch": HATCHES[i % len(HATCHES)]}
-        for i, v in enumerate(variants)
-    }
 
 
 def load(paths: list[pathlib.Path]) -> list[dict[str, str]]:
