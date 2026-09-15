@@ -19,14 +19,81 @@
 
 ## 为什么只报分位数
 
-远程机器多半不独占、多半锁不了频。均值会把这些噪声悄悄折进头条数字，分位数不会。
+远程机器多半锁不了频。均值会把噪声悄悄折进头条数字，分位数不会。
 统一报 min / p10 / median / p90 / max，图上用 p10–p90 作误差棒。
+
+## 独占性判据：看利用率，不看进程数
+
+**测量前目标卡的 `utilization.gpu` 必须为 0。** 允许存在进程——常驻的推理服务、
+持有一个空闲 CUDA context 的 worker 都可以留着，只要它们没有在用 GPU。判定只看利用率，
+不看 `nvidia-smi` 的进程数。
+
+判据这样定的原因：GPU 在多个进程之间按时间片轮转，正在用 GPU 的进程会把我们的 kernel
+周期性打断。本项目实测过一次反例——同卡另一份作业跑在 100% util 时，每 ~2ms 就插进一次
+~2.8ms 的抢占停顿，批量（hot）口径的带宽被压到真实值的一半，而 `nvidia-smi` 的进程列表
+甚至因为容器 PID 命名空间而看不到那个进程。**进程数不可靠，利用率才可靠。**
+
+`tools/preflight.sh` 据此判定：任一可见 GPU 的 util > 0 → BLOCK，禁止采集；进程列表只作
+信息输出，不参与判定。不满足就换卡或等空，**不存在「只报分位数」的折中**。
+
+## 静默窗口门禁：tools/gpu_quiet_gate.py
+
+`preflight.sh` 只做一次瞬时判定，等不到空窗就当场退出。跑一份长数据时用门禁脚本把任务
+包起来，它等一段可验证的空闲窗口才放行，任务结束后再验证一次：
+
+```bash
+python3 tools/gpu_quiet_gate.py --need 1 --interval 10 --quiet-window 60 \
+    --post-window 30 --csv results/{NN}-{slug}/{date}-{machine}.csv \
+    --report /tmp/{NN}-{slug}-{machine}.quiet.json \
+    -- python3 tools/run.py --kernel {NN}-{slug} --machine {machine}
+```
+
+- **默认 interval 10s、PRE 窗口 60s、POST 窗口 30s**。POST 不需要整分钟，2–3 个采样足以
+  确认任务结束后没有残留共占。
+- 判据按**时间跨度**而非样本数：最后一段连续 `util == 0` 覆盖满窗口才算数，避免采样抖动
+  把 50s 当成 60s。
+- 只要求 `--need` 张卡同时空闲（本系列 = 1）；选中后自动设 `CUDA_VISIBLE_DEVICES`，任务
+  保证落在选中的卡上。显存占用不管，只盯 `utilization.gpu`。
+- 退出码：`0` 通过 / `1` 任务自身失败 / `2` POST 检出共占（已跑完，按下文作废；传 `--csv`
+  时自动建 `.invalid`）/ `3` PRE 等不到空窗 / `4` 环境错误（`nvidia-smi` 读不到、`[N/A]`、
+  候选卡不存在）。`--self-test` 可无 GPU 验证窗口逻辑。
+- 全程 stdout 打一行 JSON 判决，`--report` 另写完整采样摘要。
+
+**残余风险，必须随数据声明**：RUN 期间不采样，一个「恰好在任务窗口内起、任务结束前停」
+的短命共租户观测不到。PRE+POST 双向静默只能挡住持续型共占——a100 事件里的训练作业正是
+这一类。这条写进报告的 `caveat` 字段，不得据此宣称绝对保证。
+
+## 数据作废的标注
+
+一次运行被判定不可用（非独占、工具链错配、事后发现污染等）时，**不要删掉假装没发生，
+也不要留一个看起来可用的文件**。按落盘与否分两种处理：
+
+- **未落盘**：在 `docs/environment-matrix.md` 对应机器一节记一条「作废」——日期、机器、
+  原因、结论（数字不予采用）。本次 a100 尝试即属此类。
+- **已落盘**：在该 CSV 所在目录加一个同名 `.invalid` 标记文件，并在篇目 README 写明原因；
+  不要把它回填进 `bench/machine-peaks.json`。
+
+作废的数据不得回填 `machine-peaks.json`，不得引用进文章，也不得当作「相对比值」的底数。
 
 ## 锁频与绝对值
 
 `nvidia-smi -lgc` 需要 root。拿得到就锁，`tools/run.py --clocks-locked` 记录这一事实。
 **拿不到就不报绝对 TFLOPS**，结论改用同一次会话内的相对比值（optimized / baseline），
 并在文章里写明这一口径。`clocks_locked` 列存在的意义就是让读者能判断该信多少。
+
+## 驱动版本与 forward-compat UMD
+
+CUDA 13.x 名义上要求内核驱动 ≥ 580。拿不到 root 升不了驱动时，可以只升用户态驱动（UMD）：
+镜像自带 `/usr/local/cuda-13.x/compat/`，把 `LD_LIBRARY_PATH` 指向本机内核模块配得上的
+那个 compat 目录即可。哪个能用是实测事实——a100 那台 575 内核模块只认 `cuda-13.0`
+（UMD 580.178.04），13.1/13.2/13.3 一律 `cuInit=803`。探测收敛在 `tools/cuda_compat.py`，
+`preflight.sh` 据此把 driver<580 判为 WARN（而非 BLOCK），并把 UMD 写进
+`docs/environment-matrix.md`。
+
+`tools/run.py` 每份 CSV 记 `cuda_compat` 列 = 本次运行实际生效的 compat 目录（未用则空）。
+这列存在的意义：读者看到 `driver=575` + `toolkit=13.3` 还能跑时，能知道靠的是哪条
+forward-compat 路径，而不是怀疑数据来源。**用了 compat 的会话，绝对 TFLOPS 的解读要更保守**
+——UMD 是较旧驱动栈的兼容层，口径与原生 ≥580 不同。
 
 ## ncu 计数器
 
@@ -41,7 +108,7 @@
 
 **环境列（run.py 采集）**
 
-`timestamp, machine, gpu_name, driver, sm_clock_mhz, mem_clock_mhz, compute_mode, ecc, mig, clocks_locked, toolkit, git_commit, git_dirty`
+`timestamp, machine, gpu_name, driver, cuda_compat, sm_clock_mhz, mem_clock_mhz, compute_mode, ecc, mig, clocks_locked, toolkit, git_commit, git_dirty`
 
 **测量列（二进制输出）**
 

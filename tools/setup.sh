@@ -121,7 +121,16 @@ if have nvidia-smi; then
   if [ "$(printf '%s' "${driver%%.*}" | tr -cd '0-9')" -ge 580 ] 2>/dev/null; then
     ok "driver" "$driver (CUDA 13.x ok)"
   else
-    warn "driver" "$driver is below 580.65.06 — CUDA 13.x will not run"
+    compat_shell=""; compat_rc=1
+    if have python3 && [ -f "$REPO/tools/cuda_compat.py" ]; then
+      compat_shell="$(python3 "$REPO/tools/cuda_compat.py" --shell 2>/dev/null)"; compat_rc=$?
+    fi
+    if [ "$compat_rc" = "0" ]; then
+      eval "$compat_shell"
+      warn "driver" "$driver below 580.65.06; forward-compat UMD $COMPAT_UMD via $COMPAT_DIR — export LD_LIBRARY_PATH=$COMPAT_DIR before build/measure"
+    else
+      warn "driver" "$driver is below 580.65.06 — CUDA 13.x will not run"
+    fi
   fi
   ok "gpu" "$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
   if [ -z "$ARCH" ]; then

@@ -25,12 +25,17 @@ externally-managed，所以走 apt 而不是 pip）。
 
 | 项 | 要求 | 检查 |
 |----|------|------|
-| NVIDIA 驱动 | **≥ 580.65.06**（CUDA 13.x 最低要求）| `nvidia-smi --query-gpu=driver_version --format=csv` |
+| NVIDIA 驱动 | **≥ 580.65.06**（CUDA 13.x 最低要求）；低于 580 时见下方 forward-compat 退路 | `nvidia-smi --query-gpu=driver_version --format=csv` |
 | NVIDIA Container Toolkit | 已安装 | `docker run --rm --gpus all nvidia/cuda:13.3.1-base-ubuntu24.04 nvidia-smi` |
 | GPU | Ampere 或更新 | — |
 
 **驱动是唯一可能直接否掉整套技术选型的前提。** 远程集群常年运行 535/550/570 驱动，
-低于 580 的话这个容器起不来，CUDA 13 的特性一个都用不上。上机第一件事就是查它。
+低于 580 时 CUDA 13 二进制默认报 `error 35`。**拿到 root 就升内核驱动；拿不到就走 UMD
+forward-compat**：镜像里自带 `/usr/local/cuda-13.x/compat/libcuda.so.*`，把
+`LD_LIBRARY_PATH` 指向本机内核模块能配上的那个 compat 目录即可，不动内核模块。哪一个是
+能用的（a100 那台是 `cuda-13.0` / UMD 580.178.04，更新的一律 `803`）由
+`tools/cuda_compat.py` 实测探测，`preflight.sh` 据此判定 BLOCK 还是 WARN。上机第一件事
+就是跑 `preflight.sh`。
 
 ## 构建与运行
 

@@ -86,15 +86,34 @@ Ridge point = 峰值算力 ÷ 峰值带宽，单位 FLOP/byte。一个 kernel �
 
 | 项 | 值 |
 |----|-----|
-| 驱动版本 | 待填 |
-| CUDA Toolkit | 待填 |
-| 容器镜像 | 待填 |
-| bench-probe 输出 | 待填（L2、SMEM/SM、实际时钟）|
-| 实测 HBM 带宽 / 标称 | 待填 |
-| 锁频权限 | 待确认 |
-| ncu 计数器权限 | 待确认 |
-| MIG | 待确认 |
-| 独占 | 待确认 |
+| 驱动版本 | 575.51.03（**低于 CUDA 13 的 580.65.06**）|
+| CUDA Toolkit | 13.3.73（V13.3.73）|
+| CUDA UMD（forward-compat）| **580.178.04**，`LD_LIBRARY_PATH=/usr/local/cuda-13.0/compat`（见下）|
+| 容器镜像 | cuda-kernel-lab 复现容器（`nvidia/cuda:13.3.1-devel-ubuntu24.04`）|
+| bench-probe 输出 | SM 108；cc 8.0；L2 40 MiB；smem/SM 164 KiB；smem/block opt-in 163 KiB；memory bus 5120 bit；mem clock 1593 MHz；theoretical 2039 GB/s（**仅供参照，不作基线**）|
+| 实测 HBM 带宽 / 标称 | **作废，不予采用（2026-09-15 非独占）** |
+| 锁频权限 | ✅ root 可锁（`nvidia-smi -lgc` 可用；本次未锁，因数据作废）|
+| ncu 计数器权限 | ✅ ncu 2026.2.1 存在（本次未采）|
+| MIG | Disabled |
+| 独占 | ❌ 目标机 8 卡被另一份训练作业占用，`utilization.gpu` 100% |
+
+> **2026-09-15 a100 采集尝试作废——数字不予采用、未落盘。** 8 张 A100 全部被另一份 8 卡
+> 训练作业占用（每卡 ~77 GB、`utilization.gpu` 100%、380–440 W）。逐 kernel 埋事件显示每
+> ~12.5 个 kernel 就有一次 ~2.8 ms 的周期性抢占停顿，hot 口径带宽从 ~1690 GB/s 被压到
+> ~943 GB/s，cold 也被压到理论值的 83%（干净 A100 通常 ~90%）。按
+> `docs/measurement-methodology.md` 的独占性判据（util 必须为 0）本次无效：未写入
+> `results/`，未回填 `bench/machine-peaks.json`（a100 的 ceiling 仍为 `null`）。
+>
+> **驱动口径（已定：走 forward-compat UMD）**：内核驱动 575.51.03 低于 CUDA 13 最低要求，
+> 直接跑 CUDA 13.3 二进制报 `error 35`（insufficient driver）。只升 UMD 的前向兼容可行，
+> **采用 `cuda-13.0` compat UMD 580.178.04**，运行前
+> `export LD_LIBRARY_PATH=/usr/local/cuda-13.0/compat`，不需要动宿主机内核模块。
+> 2026-09-15 复测确认（`bench-probe` 打印 `driver version 13000` / `runtime version 13030`）：
+> `cuda-13.1/13.2/13.3` 的 compat（UMD 590.48.01 / 595.91.07 / 610.43.02）配不上 575 内核模块，
+> `cuInit` 全部返回 **803**（unsupported display driver / cuda driver combination）；只有 13.0 通过。
+> 探测逻辑收敛在 `tools/cuda_compat.py`，`preflight.sh` 据此把 driver<580 降为 WARN，
+> `tools/run.py` 每份 CSV 记录实际使用的 compat 目录（`cuda_compat` 列）。宿主机若日后升到
+> ≥ 580，此列自动变空，无需改脚本。
 
 ### h20 — H20 141GB HBM3e SXM (`sm_90a`)
 

@@ -13,6 +13,7 @@
 #   ./run_cuda_container.sh [COMMAND...]
 #   (default COMMAND is bash; pass e.g. "ncu --version" to run one-shot)
 
+NAME=lychee-cuda1331-devel
 IMAGE="${IMAGE:-nvidia/cuda:13.3.1-devel-ubuntu24.04}"
 NAME="${NAME:-cuda1331-devel}"
 WORKDIR="${WORKDIR:-/workspace}"

@@ -50,6 +50,12 @@ best cold 4046.6 / best hot 4306.3 GB/s，已回填 `bench/machine-peaks.json` �
 
 尚未完成的部分：a100 / h200 的对应测量，用于兑现「三机 ridge point 差 6.6×」的论证。
 
+**2026-09-15 a100 尝试作废（数字不予采用）**：目标机 8 张 A100 全部被另一份 8 卡训练作业
+占用（`utilization.gpu` 100%），逐 kernel 埋事件可见周期性 ~2.8 ms 抢占停顿，批量口径带宽
+被压到 ~943 GB/s（真实约 ~1690 GB/s）。按 `docs/measurement-methodology.md` 的独占性判据
+（实测前 util 必须为 0）本次无效：未写入本目录 CSV，未回填 `bench/machine-peaks.json`。
+设备参数与作废原因见 `docs/environment-matrix.md` 的 a100 一节。
+
 ## 截图
 
 ![cold latency](../../figures/01-execution-model/fig-01-execution-model-cold-latency.png)

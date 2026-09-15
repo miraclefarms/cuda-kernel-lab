@@ -20,8 +20,10 @@ description: 在 cuda-kernel-lab 里为某一篇文章生产代码与实验数�
 ./tools/preflight.sh --matrix
 ```
 
-- 退出码非 0 → **停止**。BLOCK 项（驱动 < 580、MIG 开启、无 nvcc）会让数据不可用或不可比。
-- WARN 项不阻塞，但**决定这次数据能说什么**：没锁频就不能报绝对 TFLOPS，非独占就只能报分位数，没有 ncu 就不能给计数器证据。把这些约束记下来，写文章时逐条声明。
+- 退出码非 0 → **停止**。BLOCK 项（驱动 < 580、MIG 开启、无 nvcc、**目标卡 `utilization.gpu` 不为 0**）会让数据不可用或不可比。
+- WARN 项不阻塞，但**决定这次数据能说什么**：没锁频就不能报绝对 TFLOPS，没有 ncu 就不能给计数器证据。把这些约束记下来，写文章时逐条声明。
+- WARN `driver < 580` 走的是 forward-compat UMD：preflight 会打印要导出的 `LD_LIBRARY_PATH`（探测见 `tools/cuda_compat.py`），**跑数据前必须 export，否则报 `error 35`**；`run.py` 会把实际用的 compat 目录记进 CSV 的 `cuda_compat` 列。
+- 独占判据看**利用率不看进程数**：常驻但空闲的进程（推理服务、空闲 context）允许存在；只有「正在用 GPU」才禁止采集。跨容器 PID 命名空间时进程列表可能看不到占用者，别信进程数。
 - 第一次上某台机器时，用 `--matrix` 的输出回填 `docs/environment-matrix.md` 第二部分。
 
 ## 机器分工（决定在哪台机器做什么）
@@ -84,6 +86,8 @@ sudo nvidia-smi -rgc                       # 测完立刻复位
 ```
 
 - `--clocks-locked` **只有真锁了才传**，它会写进 CSV 决定读者信多少
+- **长数据用门禁包起来**：`tools/gpu_quiet_gate.py` 等目标卡连续空闲 60s 才启动任务，任务结束后再验 30s，POST 失败自动建 `.invalid`。用法与退出码见 `docs/measurement-methodology.md`
+- 开跑前再确认目标卡 `utilization.gpu == 0`；采集途中若有人在用，这份数据作废，按 `docs/measurement-methodology.md` 标注，不要落盘假装可用
 - 跑完检查 CSV：`git_dirty` 必须是 `no`，`mig` 必须 `Disabled`，p10–p90 离散过大说明机器不干净
 - 扫参数时每个配置一行，不要只留最优的那行——收益曲线和失效边界都在被扔掉的那些行里
 

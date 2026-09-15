@@ -53,9 +53,11 @@ python3 tools/check_confidential.py --staged # 提交前
 
 这些规则的存在理由是：远程机器多半拿不到 root，测量条件天然受限，所以口径必须写死。
 
+- **测量前目标卡的 `utilization.gpu` 必须为 0**。**允许存在进程**（常驻推理服务、持有一个空闲 CUDA context 的 worker 都行），只要它没在用 GPU；判定只看利用率，不看进程数。有人在用 GPU 时按时间片轮转，会把我们的 kernel 周期性打断——实测同卡另一份作业跑到 100% util 时，hot 口径带宽被压到真实值的一半。这条不满足就不采，没有「只报分位数」的折中。
+- **长数据用 `tools/gpu_quiet_gate.py` 包住**：目标卡连续空闲 60s 才启动任务，任务结束后再验 30s；POST 失败自动建 `.invalid`。用法、退出码与残余风险见 `docs/measurement-methodology.md`。
 - **没锁频就不报绝对 TFLOPS**。拿不到 `nvidia-smi -lgc` 权限时，结论一律用「同一次会话内的相对比值」表述，并在 CSV 里记录实际 SM 时钟。
-- **一律报分位数**（min / p10 / median / p90），不报均值。机器不独占时尤其如此。
-- **每次运行必须记录环境**：机器代号、GPU 型号、compute capability、驱动版本、CUDA toolkit 版本、SM/内存实际时钟、MIG 状态、是否独占、ECC 状态。`tools/run.py` 每次运行自动采集；换机器时先跑 `tools/preflight.sh`。
+- **一律报分位数**（min / p10 / median / p90），不报均值。
+- **每次运行必须记录环境**：机器代号、GPU 型号、compute capability、驱动版本、CUDA toolkit 版本、forward-compat UMD（未用则空）、SM/内存实际时钟、MIG 状态、是否独占、ECC 状态。`tools/run.py` 每次运行自动采集；换机器时先跑 `tools/preflight.sh`。
 - **冷热两种口径分开报**：cold（每次 L2 flush + 单次启动）与 hot（CUDA Graph 内多次重放）。混在一起的数字没有意义。
 - **跑不出预期收益就如实记录**。这个系列的核心资产是失效边界，负结果与正结果同等重要，不调参凑结论。
 
@@ -107,9 +109,10 @@ docker/      复现容器：Dockerfile（digest 固定）+ run.sh
 ./tools/preflight.sh --matrix
 ```
 
-退出码非 0 表示有 BLOCK 项（驱动 < 580、MIG 开启、缺 nvcc），**在它通过之前不要采集任何
-数据**。WARN 项不阻塞，但决定这次数据能说什么：没锁频不报绝对 TFLOPS，非独占只报分位数，
-没有 ncu 就不给计数器证据。
+退出码非 0 表示有 BLOCK 项（驱动 < 580、MIG 开启、缺 nvcc、**目标卡利用率不为 0**），
+**在它通过之前不要采集任何数据**。WARN 项不阻塞，但决定这次数据能说什么：没锁频不报绝对
+TFLOPS，没有 ncu 就不给计数器证据。进程数不是判据——常驻但空闲的进程允许存在，只有
+「正在用 GPU」才禁止采集。
 
 ## Skill
 

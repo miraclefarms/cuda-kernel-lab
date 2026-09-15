@@ -20,11 +20,19 @@ import threading
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+try:
+    from cuda_compat import find_in_ld_library_path
+except Exception:  # keep run.py usable even if the helper is absent
+    def find_in_ld_library_path() -> tuple[str, str]:
+        return "", ""
+
 ENV_FIELDS = [
     "timestamp",
     "machine",
     "gpu_name",
     "driver",
+    "cuda_compat",
     "sm_clock_mhz",
     "mem_clock_mhz",
     "compute_mode",
@@ -108,11 +116,13 @@ def capture_env(machine: str, clocks_locked: bool, sm_clock: str = "") -> dict[s
     for line in nvcc.splitlines():
         if "release" in line:
             toolkit = line.split("release")[-1].strip().split(",")[0].strip()
+    compat_dir, _ = find_in_ld_library_path()
     return {
         "timestamp": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "machine": machine,
         "gpu_name": parts[0],
         "driver": parts[1],
+        "cuda_compat": compat_dir,
         "sm_clock_mhz": sm_clock or parts[2],
         "mem_clock_mhz": parts[3],
         "compute_mode": parts[4],

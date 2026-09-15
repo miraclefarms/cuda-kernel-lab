@@ -30,13 +30,26 @@ if ! command -v nvidia-smi >/dev/null 2>&1; then
   exit 1
 fi
 
-# --- 1. driver: the one prerequisite that invalidates the whole CUDA 13 premise
+# --- 1. driver: CUDA 13.x wants >= 580.65.06, but a forward-compat UMD can
+# lift the user-mode driver without touching the kernel module. The a100 box
+# runs CUDA 13.3 through the cuda-13.0 compat UMD (580.178.04) on a 575 kernel
+# module; newer compat UMDs (590/595/610) fail cuInit. Whether a compat path
+# works is empirical, so probe it instead of assuming. tools/cuda_compat.py is
+# the single source of truth, shared with run.py's CSV record.
+COMPAT_SCRIPT="$(cd "$(dirname "$0")" && pwd)/cuda_compat.py"
+COMPAT_NEEDED=0 COMPAT_USABLE=1 COMPAT_DIR="" COMPAT_UMD="" COMPAT_REASON=""
+if command -v python3 >/dev/null 2>&1 && [ -f "$COMPAT_SCRIPT" ]; then
+  eval "$(python3 "$COMPAT_SCRIPT" --shell 2>/dev/null)" || true
+fi
+
 DRIVER="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d ' ')"
 DRV_MAJOR="${DRIVER%%.*}"
 if [ "${DRV_MAJOR:-0}" -ge 580 ] 2>/dev/null; then
   ok "driver $DRIVER" ">= 580.65.06, CUDA 13.x supported"
+elif [ "$COMPAT_USABLE" = "1" ]; then
+  warn "driver $DRIVER" "< 580.65.06; forward-compat UMD ${COMPAT_UMD} via ${COMPAT_DIR} works — export LD_LIBRARY_PATH before building/measuring"
 else
-  fail "driver $DRIVER" "CUDA 13.x needs >= 580.65.06; container and toolkit will not run"
+  fail "driver $DRIVER" "CUDA 13.x needs >= 580.65.06; no forward-compat UMD passed cuInit"
 fi
 
 # --- 2. identity: which card is this actually
@@ -59,12 +72,34 @@ else
   ok "MIG" "${MIG:-N/A}"
 fi
 
-# --- 4. exclusivity: shared machines make every number a distribution
+# --- 4. exclusivity: what corrupts timing is active GPU use, not the mere
+# presence of a context. A resident inference server that is idle is fine; a
+# process that is actually running time-slices with our kernels and, measured on
+# this repo, halves the batch (hot) bandwidth. So the criterion is sampled
+# utilization == 0, NOT process count — a co-tenant can even be invisible in the
+# process list across a container PID namespace while still using the GPU.
+# 判据是「利用率是否为 0」而非进程数：常驻但空闲的 context 允许存在，真正在用 GPU
+# 才禁止采集。跨容器 PID 命名空间下进程列表可能看不到占用者，利用率更可靠。
 PROCS="$(nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | wc -l | tr -d ' ')"
-if [ "${PROCS:-0}" -gt 0 ]; then
-  warn "exclusivity" "$PROCS compute process(es) already running — report ratios, not absolutes"
+BUSY=""
+for _ in 1 2 3 4 5; do
+  while IFS=, read -r idx util; do
+    idx="${idx// /}"; util="${util// /}"
+    if [ "${util:-0}" -gt 0 ] 2>/dev/null; then
+      case " $BUSY " in *" $idx:"*) ;; *) BUSY="$BUSY $idx:${util}%" ;; esac
+    fi
+  done < <(nvidia-smi --query-gpu=index,utilization.gpu --format=csv,noheader,nounits 2>/dev/null)
+  sleep 0.2
+done
+if [ -n "$BUSY" ]; then
+  fail "GPU utilization" "in use:$BUSY — time-slicing corrupts timing; do not collect"
 else
-  ok "exclusivity" "no other compute processes"
+  ok "GPU utilization" "0% on all visible GPUs"
+fi
+if [ "${PROCS:-0}" -gt 0 ]; then
+  say "resident processes" "$PROCS context(s) present — allowed while idle"
+else
+  say "resident processes" "none"
 fi
 
 # --- 5. clock locking: decides whether absolute TFLOPS may be quoted at all
@@ -123,13 +158,18 @@ if [ "$MATRIX" = "1" ]; then
   echo "---- paste into docs/environment-matrix.md ----"
   echo "| 驱动版本 | $DRIVER |"
   echo "| CUDA Toolkit | $(nvcc --version 2>/dev/null | grep release | sed 's/.*release //' || echo '未安装') |"
+  if [ "$COMPAT_NEEDED" = "1" ] && [ "$COMPAT_USABLE" = "1" ]; then
+    echo "| CUDA UMD | ${COMPAT_UMD}（forward-compat，\`LD_LIBRARY_PATH=${COMPAT_DIR}\`）|"
+  else
+    echo "| CUDA UMD | 随内核驱动（无需 forward-compat）|"
+  fi
   echo "| 容器镜像 | 待填 |"
   echo "| bench-probe 输出 | 待填（运行 ./build/kernels/01-execution-model/bench-probe 回填）|"
   echo "| 实测 streaming 上限 / 标称 | 待填（bench-probe 的 best cold/hot，同时写入 bench/machine-peaks.json）|"
   echo "| 锁频权限 | $( [ "$(id -u)" = 0 ] && echo '✅ root 可锁' || echo '❌ 非 root' ) |"
   echo "| ncu 计数器权限 | $(command -v ncu >/dev/null 2>&1 && echo '待确认（见上）' || echo '❌ 未安装') |"
   echo "| MIG | ${MIG:-N/A} |"
-  echo "| 独占 | $( [ "${PROCS:-0}" -eq 0 ] && echo '✅ 无其他计算进程' || echo "❌ ${PROCS} 个进程" ) |"
+  echo "| 独占（util=0） | $( [ -z "$BUSY" ] && echo '✅ 所有可见卡 utilization.gpu = 0' || echo "❌ 在用:$BUSY" ) |"
 fi
 
 exit "$HARD_FAIL"

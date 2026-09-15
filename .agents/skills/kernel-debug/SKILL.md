@@ -38,8 +38,9 @@ description: cuda-kernel-lab 的实验排查手册——数字可疑、两次跑
 grep -E "sm_clock|clocks_locked|git_dirty|mig" results/{NN}-{slug}/*.csv
 ```
 
-- 两次跑差 20% 以上：多半没锁频或机器不独占。看 CSV 的 `sm_clock_mhz` 是否一致
+- 两次跑差 20% 以上：多半没锁频或有人在用 GPU。看 CSV 的 `sm_clock_mhz` 是否一致
 - p10–p90 离散大：同上，结论改用同一次会话内的相对比值
+- **hot 远低于 cold（例如只有一半）**：先查目标卡 `utilization.gpu`。有人在用 GPU 时会按时间片周期抢占——逐 kernel 埋事件能看到规律的「单次超长 kernel」，这时的 batch 平均不可用，整份数据作废（判据看利用率不看进程数，跨容器进程列表可能看不到占用者）
 - `git_dirty=yes`：这份数据不能进文章，提交干净后重跑
 
 ## 5. 网格与占用率
