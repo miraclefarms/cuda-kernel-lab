@@ -58,7 +58,7 @@ fi
 # works is empirical, so probe it instead of assuming. tools/cuda_compat.py is
 # the single source of truth, shared with run.py's CSV record.
 COMPAT_SCRIPT="$(cd "$(dirname "$0")" && pwd)/cuda_compat.py"
-COMPAT_NEEDED=0 COMPAT_USABLE=1 COMPAT_DIR="" COMPAT_UMD="" COMPAT_REASON=""
+COMPAT_NEEDED=0 COMPAT_USABLE=1 COMPAT_DIR="" COMPAT_UMD="" COMPAT_LD_PREPEND="" COMPAT_REASON=""
 if command -v python3 >/dev/null 2>&1 && [ -f "$COMPAT_SCRIPT" ]; then
   eval "$(python3 "$COMPAT_SCRIPT" --shell 2>/dev/null)" || true
 fi
@@ -70,7 +70,11 @@ if [ -z "$DRIVER" ]; then
 fi
 DRV_MAJOR="${DRIVER%%.*}"
 if [ "${DRV_MAJOR:-0}" -ge 580 ] 2>/dev/null; then
-  ok "driver $DRIVER" ">= 580.65.06, CUDA 13.x supported"
+  if [ -n "$COMPAT_LD_PREPEND" ]; then
+    ok "driver $DRIVER" ">= 580.65.06; native UMD shadowed — prepend $COMPAT_LD_PREPEND (collect_h20.sh/run.py do this)"
+  else
+    ok "driver $DRIVER" ">= 580.65.06, CUDA 13.x supported"
+  fi
 elif [ "$COMPAT_USABLE" = "1" ]; then
   warn "driver $DRIVER" "< 580.65.06; forward-compat UMD ${COMPAT_UMD} via ${COMPAT_DIR} works — export LD_LIBRARY_PATH before building/measuring"
 else
@@ -185,6 +189,8 @@ if [ "$MATRIX" = "1" ]; then
   echo "| CUDA Toolkit | $(nvcc --version 2>/dev/null | grep release | sed 's/.*release //' || echo '未安装') |"
   if [ "$COMPAT_NEEDED" = "1" ] && [ "$COMPAT_USABLE" = "1" ]; then
     echo "| CUDA UMD | ${COMPAT_UMD}（forward-compat，\`LD_LIBRARY_PATH=${COMPAT_DIR}\`）|"
+  elif [ -n "$COMPAT_LD_PREPEND" ]; then
+    echo "| CUDA UMD | 随内核驱动（native，无需 forward-compat；镜像 compat 目录抢先，\`LD_LIBRARY_PATH=${COMPAT_LD_PREPEND}\`）|"
   else
     echo "| CUDA UMD | 随内核驱动（无需 forward-compat）|"
   fi

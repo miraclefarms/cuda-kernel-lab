@@ -22,10 +22,13 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 try:
-    from cuda_compat import find_in_ld_library_path
+    from cuda_compat import find_in_ld_library_path, loader_prepend_dir
 except Exception:  # keep run.py usable even if the helper is absent
     def find_in_ld_library_path() -> tuple[str, str]:
         return "", ""
+
+    def loader_prepend_dir() -> str:
+        return ""
 
 ENV_FIELDS = [
     "timestamp",
@@ -190,8 +193,16 @@ def main() -> int:
         return 1
 
     forwarded = args.rest[1:] if args.rest and args.rest[0] == "--" else args.rest
+    child_env = os.environ.copy()
+    prepend = loader_prepend_dir()
+    if prepend:
+        existing = child_env.get("LD_LIBRARY_PATH", "")
+        child_env["LD_LIBRARY_PATH"] = prepend + (f":{existing}" if existing else "")
+        print(f"[info] prepending {prepend} to LD_LIBRARY_PATH for loader UMD selection",
+              file=sys.stderr)
     with ClockSampler() as sampler:
-        proc = subprocess.run([str(binary), *forwarded], capture_output=True, text=True)
+        proc = subprocess.run([str(binary), *forwarded], capture_output=True, text=True,
+                              env=child_env)
     if proc.returncode != 0:
         sys.stderr.write(proc.stderr)
         return proc.returncode

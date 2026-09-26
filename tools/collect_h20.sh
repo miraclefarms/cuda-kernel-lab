@@ -6,6 +6,19 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
+# Some images place a cuda-*/compat directory ahead of the native driver in
+# ld.so.conf. That makes a >= 580 kernel driver load an older, incompatible UMD
+# and fail cuInit with 803 even though the matching native UMD is installed.
+# Ask cuda_compat.py where the working UMD lives and prepend it for every child
+# process (occupancy-scan, run.py, the benchmark binaries).
+if command -v python3 >/dev/null 2>&1; then
+  PREPEND="$(python3 tools/cuda_compat.py --ld-path 2>/dev/null || true)"
+  if [ -n "$PREPEND" ]; then
+    export LD_LIBRARY_PATH="$PREPEND${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    echo "cuda UMD: prepending $PREPEND to LD_LIBRARY_PATH" >&2
+  fi
+fi
+
 usage() {
   cat <<'EOF'
 Usage: ./tools/collect_h20.sh <build|preflight|01|02|02-unlocked|03> [physical GPU index]
