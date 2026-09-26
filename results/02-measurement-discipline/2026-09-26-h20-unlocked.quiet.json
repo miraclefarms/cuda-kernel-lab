@@ -1,0 +1,49 @@
+{
+  "verdict": "pass",
+  "reason": "PRE and POST windows quiet",
+  "exit_code": 0,
+  "command": [
+    "python3",
+    "tools/run.py",
+    "--kernel",
+    "02-measurement-discipline",
+    "--machine",
+    "h20",
+    "--tag",
+    "unlocked",
+    "--",
+    "--samples-out",
+    "results/02-measurement-discipline/2026-09-26-h20-unlocked-samples.csv"
+  ],
+  "interval_s": 10.0,
+  "quiet_window_s": 60.0,
+  "post_window_s": 30.0,
+  "post_settle_s": 5.0,
+  "max_wait_s": 1800.0,
+  "tolerance_pct": 0,
+  "need": 1,
+  "candidates": [
+    0
+  ],
+  "selected_gpus": [
+    0
+  ],
+  "pre": {
+    "samples": 7,
+    "span_s": 62.29,
+    "max_util_pct": 0,
+    "selected_gpus": [
+      0
+    ]
+  },
+  "post": {
+    "samples": 4,
+    "span_s": 30.75,
+    "max_util_pct": 0,
+    "selected_gpus": [
+      0
+    ]
+  },
+  "task_returncode": 0,
+  "caveat": "no sampling during RUN: a co-tenant that starts and stops entirely inside the task window is not observable; PRE+POST only catch persistent co-tenants that outlive the task"
+}
