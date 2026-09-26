@@ -39,6 +39,8 @@ CUDA 13 语言特性与硬件优化系列的代码与实验仓库。
 
 每篇的主张、实验设计与零件见 [docs/series-outline.md](docs/series-outline.md)。篇号变动以该文件「未决事项」为准。
 
+首三篇的 H20-only 采集与验收步骤见 [docs/h20-holiday-collection.md](docs/h20-holiday-collection.md)。
+
 ## 快速开始
 
 推荐走容器：宿主机只需要 NVIDIA 驱动（**≥ 580.65.06**，CUDA 13.x 的最低要求）和

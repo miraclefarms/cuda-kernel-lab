@@ -8,6 +8,7 @@
 #
 #   ./tools/preflight.sh            # check and print
 #   ./tools/preflight.sh --matrix   # also emit a markdown block for environment-matrix.md
+#   ./tools/preflight.sh --gpu 0 --matrix  # check one physical GPU on a shared host
 #
 # Exit 0 = safe to measure. Exit 1 = a hard blocker; fix it before collecting data.
 set -uo pipefail
@@ -15,7 +16,27 @@ set -uo pipefail
 HARD_FAIL=0
 SOFT=()
 MATRIX=0
-[ "${1:-}" = "--matrix" ] && MATRIX=1
+TARGET_GPU=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --matrix) MATRIX=1 ;;
+    --gpu)
+      shift
+      TARGET_GPU="${1:-}"
+      if ! [[ "$TARGET_GPU" =~ ^[0-9]+$ ]]; then
+        echo "--gpu requires a physical GPU index" >&2
+        exit 2
+      fi
+      ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+SMI_TARGET=()
+if [ -n "$TARGET_GPU" ]; then
+  SMI_TARGET=(-i "$TARGET_GPU")
+fi
 
 say()  { printf '%-34s %s\n' "$1" "$2"; }
 fail() { printf '%-34s \033[31mBLOCK\033[0m  %s\n' "$1" "$2"; HARD_FAIL=1; }
@@ -42,7 +63,11 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$COMPAT_SCRIPT" ]; then
   eval "$(python3 "$COMPAT_SCRIPT" --shell 2>/dev/null)" || true
 fi
 
-DRIVER="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d ' ')"
+DRIVER="$(nvidia-smi "${SMI_TARGET[@]}" --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')"
+if [ -z "$DRIVER" ]; then
+  fail "GPU selection" "physical GPU ${TARGET_GPU:-0} not visible"
+  exit 1
+fi
 DRV_MAJOR="${DRIVER%%.*}"
 if [ "${DRV_MAJOR:-0}" -ge 580 ] 2>/dev/null; then
   ok "driver $DRIVER" ">= 580.65.06, CUDA 13.x supported"
@@ -53,8 +78,8 @@ else
 fi
 
 # --- 2. identity: which card is this actually
-GPU="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
-MEM="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)"
+GPU="$(nvidia-smi "${SMI_TARGET[@]}" --query-gpu=name --format=csv,noheader | head -1)"
+MEM="$(nvidia-smi "${SMI_TARGET[@]}" --query-gpu=memory.total --format=csv,noheader,nounits | head -1)"
 COUNT="$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l | tr -d ' ')"
 say "gpu" "$GPU  (${MEM} MiB, ${COUNT} visible)"
 case "$GPU" in
@@ -65,7 +90,7 @@ case "$GPU" in
 esac
 
 # --- 3. MIG: a sliced GPU has no full SM view and its numbers are not comparable
-MIG="$(nvidia-smi --query-gpu=mig.mode.current --format=csv,noheader | head -1 | tr -d ' ')"
+MIG="$(nvidia-smi "${SMI_TARGET[@]}" --query-gpu=mig.mode.current --format=csv,noheader | head -1 | tr -d ' ')"
 if [ "$MIG" = "Enabled" ]; then
   fail "MIG" "enabled — no full SM view, cluster behaviour restricted, data not comparable"
 else
@@ -85,7 +110,7 @@ BUSY=""
 for _ in 1 2 3 4 5; do
   while IFS=, read -r idx util; do
     idx="${idx// /}"; util="${util// /}"
-    if [ "${util:-0}" -gt 0 ] 2>/dev/null; then
+    if { [ -z "$TARGET_GPU" ] || [ "$idx" = "$TARGET_GPU" ]; } && [ "${util:-0}" -gt 0 ] 2>/dev/null; then
       case " $BUSY " in *" $idx:"*) ;; *) BUSY="$BUSY $idx:${util}%" ;; esac
     fi
   done < <(nvidia-smi --query-gpu=index,utilization.gpu --format=csv,noheader,nounits 2>/dev/null)
@@ -94,7 +119,7 @@ done
 if [ -n "$BUSY" ]; then
   fail "GPU utilization" "in use:$BUSY — time-slicing corrupts timing; do not collect"
 else
-  ok "GPU utilization" "0% on all visible GPUs"
+  ok "GPU utilization" "0% on ${TARGET_GPU:+target }visible GPU${TARGET_GPU:+ $TARGET_GPU}"
 fi
 if [ "${PROCS:-0}" -gt 0 ]; then
   say "resident processes" "$PROCS context(s) present — allowed while idle"

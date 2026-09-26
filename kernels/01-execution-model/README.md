@@ -10,7 +10,7 @@
 
 1. **这台机器是带宽受限还是算力受限。** 同一个优化，在带宽受限的机器上有效，在算力受限的机器上
    可能白做甚至变慢。判断的尺子是 ridge point = 峰值算力 ÷ 峰值带宽。h20 与 h200 同为 `sm_90a`、
-   显存带宽相同，唯一的大差异是算力（148 vs 989 TFLOPS），ridge point 差 6.6 倍——所以「Hopper
+   标称显存带宽相同，但算力（148 vs 989 TFLOPS）与 SM 数（78 vs 132）都不同，BF16 ridge point 差 6.6 倍——所以「Hopper
    优化」这个说法没有意义，得说是哪一台。这部分来自 datasheet，见 `docs/environment-matrix.md`。
 2. **「100%」该用哪个数。** datasheet 的标称带宽（h20/h200 为 4814 GB/s）是物理上限，但即使是最
    简单、最理想的访存 kernel 也跑不到它。如果只拿标称值当分母，后面所有 kernel 看起来都很差，
@@ -52,9 +52,10 @@
 - h20 与 h200 带宽标称相同、算力差 6.7 倍：多出来的算力和 SM 数，对访存上限有没有影响？
 - 本篇不做优化对比，只产出后面每篇都要用的两个分母。
 
-**与提纲的差异**：`docs/series-outline.md` 第 01 篇还有一项 occupancy 静态扫描
-（`cudaOccupancyMaxActiveBlocksPerMultiprocessor`，寄存器数 × SMEM 用量 → 驻留块数），本目录**尚未实现**。
-另外提纲设想第 01 篇不做计时，但 streaming 上限必须计时；它用的是和所有 kernel 相同的
+**与提纲的差异**：`docs/series-outline.md` 第 01 篇要求的 occupancy 静态扫描现已实现，
+但**尚无可引用的扫描结果**。它用四个实际寄存器用量不同的 probe kernel，调用
+`cudaOccupancyMaxActiveBlocksPerMultiprocessor` 扫 SMEM，记录理论驻留块数；这不等于实测
+occupancy，更不等于性能。提纲设想第 01 篇不做计时，但 streaming 上限必须计时；它用的是和所有 kernel 相同的
 `bench::measure_cold` / `measure_hot`，口径在第 02 篇交代。
 
 ## 目录代码
@@ -62,7 +63,9 @@
 | 文件 | 作用 |
 |---|---|
 | `probe_main.cu` | `bench-probe`：打印 device props 与特性门，并实测 streaming 上限（read / copy / write，cold / hot）|
-| `CMakeLists.txt` | 产出目标 `bench-probe` |
+| `occupancy_scan.cu` | 静态资源扫描：实际寄存器数 × 动态 SMEM → 理论驻留块数、warp 数与 occupancy |
+| `generate_occupancy_probes.py` | 生成四个寄存器压力不同的 probe kernel；以编译后的 `actual_regs_per_thread` 为准 |
+| `CMakeLists.txt` | 产出目标 `bench-probe` 与 `occupancy-scan` |
 
 **为什么没有 baseline / optimized**：本篇是基线画像，不是「同一问题两份实现比收益」，因此
 只有一个可执行文件；其余篇目才有并列实现。
@@ -74,6 +77,8 @@
 - 特性门：cc ≥ 9.0 → TMA / cluster / DSMEM / wgmma；cc ≥ 10.0 → tcgen05 / TMEM
 - 与 kernel 同一套口径的 streaming 测量：`bench::measure_stream_ceiling`（cold / hot，工作集
   `bench::kStreamBufferBytes`），所以这个上限可以直接当带宽类篇目的分母
+- `cudaFuncGetAttributes` + `cudaOccupancyMaxActiveBlocksPerMultiprocessor`：用编译后的实际
+  寄存器数做横轴；若 `local_bytes_per_thread` 非零，需把 spill 作为限制声明
 
 ## 实验数据
 
@@ -106,20 +111,20 @@
 
 ### h20 / h200 对比分析
 
-这组对比的价值在于：两卡同为 `sm_90a`、同为 141GB HBM3e、标称带宽同为 4814 GB/s，唯一
-显著差异是 SM 数（78 vs 132，1.69×）与算力（BF16 148 vs 989 TFLOPS，6.7×）。带宽这个
-常见的混淆变量被自然排除，于是「多出来的算力/占用率对访存上限有没有用」可以被单独观察。
+这组对比的价值在于：两卡同为 `sm_90a`、同为 141GB HBM3e、标称带宽同为 4814 GB/s，
+但 SM 数（78 vs 132，1.69×）与算力（BF16 148 vs 989 TFLOPS，6.7×）都不同。
+标称 HBM 带宽近似相同降低了一项混淆，但这不是只改变算力的受控实验；下文只能描述相关性。
 
 - **h200 在三个 variant 上全面略高，但幅度分层明显**：read +7.3～7.8% > copy +2.9～3.3% >
   write +1.6～2.1%。SM 翻倍只在 read 上兑现得多。
-- **解释**：write / copy 已经贴近同一块 HBM 的物理墙，再多的 SM 也搬不快；read 是三者中
-  达成率最低的（cold 68.9% / 73.9%），瓶颈不在 HBM，而在读出依赖链与 in-flight 请求数，
-  更多 SM 与更高占用率能直接补上这块延迟。
-- **对优化的含义**：凡是靠「更多并行掩盖访存延迟」的手段（更宽访存、更多在飞 load、
-  提高占用率），h20 的 headroom 大于 h200；而纯粹提高 HBM 效率的手段在两卡上收益接近。
-  这正对应「同一优化在不同机器上收益可能反号」的机制。
-- **cold vs hot**：两卡 hot 都稳定高于 cold（h20 best +259.7 GB/s / +6.4%，h200 best
-  +287.1 GB/s / +7.0%），这部分是启动开销与冷缓存；单次启动场景要按 cold 报。
+- **待验证的解释**：write / copy 可能更靠近 HBM 吞吐限制；read 的达成率较低（cold 68.9% /
+  73.9%），可能受在飞请求数、指令或调度限制。仅凭带宽数字不能区分这些机制，需要
+  Nsight Compute 计数器及可控参数扫描。
+- **对优化的含义**：更多并行、更多在飞 load 是否更有利于 h20，目前不能据这六行基线数据
+  下结论；须在后续篇目做同机参数扫描，再跨机复测。
+- **cold vs hot**：两卡 hot 都高于 cold（h20 best +259.7 GB/s / +6.4%，h200 best
+  +287.1 GB/s / +7.0%），差额混合了启动方式与缓存状态，不能只归因于其中一项；
+  单次启动场景要按 cold 报。
 - **单次 HBM 流量上限**：h20 约标称 84%（cold）–89%（hot），h200 约 85%–91%，两卡差距在
   read 上最大、write 上最小。
 
@@ -138,6 +143,13 @@ a100 是三机论证的第三点，用来说明「算力弱 ≠ 免受带宽限�
 - **待办**：等目标卡 `utilization.gpu == 0` 且可锁频后重跑 `bench-probe`，随后一次性回填
   本表 a100 两列、`bench/machine-peaks.json` 的 `a100.bw_ceiling_*`、以及
   `docs/environment-matrix.md` 的 a100 实测行。设备参数与作废原因见该文件 a100 一节。
+
+### H20-only 新采集轮次
+
+2026 年十一假期的优先级是锁频、空闲窗口门禁下重采 H20，并补上静态 occupancy 表。
+流程见 [H20 采集计划](../../docs/h20-holiday-collection.md)。新 CSV 通过校验后，先更新
+`bench/machine-peaks.json`，再只用新 H20 CSV 出图；上面的旧 H20/H200 数字保留为探索性背景，
+不混入新图，也不凭它们单独声称跨机器收益反号。
 
 ### 文章论证骨架（供 content repo 撰写引用）
 
@@ -162,4 +174,6 @@ a100 是三机论证的第三点，用来说明「算力弱 ≠ 免受带宽限�
 ```bash
 cmake --build build --target bench-probe -j
 ./build/kernels/01-execution-model/bench-probe
+cmake --build build --target occupancy-scan -j
+./build/kernels/01-execution-model/occupancy-scan
 ```
