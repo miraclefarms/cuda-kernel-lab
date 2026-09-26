@@ -18,7 +18,9 @@
 跑的是同一条指令。A100 的 SMEM 上限更小（见下），64 元素的 tile 在 A100 上不存在；h20 算力受限、
 h200 算力富余，重叠计算的收益取决于「计算在不在等搬运」，两台的答案可能相反。
 
-以上都是待验证的假设。冒烟运行里已经看到重叠未必带来收益，采集后以数据为准。
+以上都是待验证的假设。本轮 H20 数据（见下）显示：**重叠版本 `cp-async` 在 7 个形状里 5 个比
+`cp-async-wait` 更慢**，而直接读 global 的 `global` 在 2d 形状上反而快过 `sync-stage`——都写成
+负结果。`cp.async` 是 Ampere 时代的指令，不是 CUDA 13 新特性。
 
 ## 四个变体
 
@@ -96,36 +98,90 @@ sm_90a 目标能放下 128 KiB。`CMakeLists.txt` 在目标架构含 sm_8x 时�
 
 ## 实验数据
 
-**待采集。** 三台机器均无有效数据。
+**H20-3e 单机，2026-09-26，锁频 1800 MHz，驱动 615.71.09，MIG Disabled，ECC on，静默门禁通过，
+commit `0025113`，`git_dirty=no`。** 主表：`results/03-smem-staging/2026-09-26-h20.csv`
+（7 形状 × 4 变体 × cold/hot = 56 行；每个线程先逐位校验再计时）。
 
-编译状态：sm_90a 与 sm_80 在 CUDA 13.3.1 容器内均编译通过。2026-09-15 在 h20 上做过一次冒烟
-运行（5 个样本、未提交的工作树）：7 个形状 × 4 个变体的逐位校验全部通过。该次数字不满足
-`git_dirty=no`，**不落盘、不引用**。
+### 相对 `sync-stage` 的 median 加速比
 
-采集时要回填：
+| pattern | tile | elems | 口径 | global | sync-stage | cp-async-wait | cp-async |
+|---|---|---|---|---|---|---|---|
+| 1d | 1×4 | 4 | cold | 1.03 | 1.00 | **1.26** | 1.18 |
+| 1d | 1×16 | 16 | cold | **0.57** | 1.00 | **2.21** | 2.21 |
+| 2d | 4×4 | 16 | cold | 1.97 | 1.00 | 2.20 | 2.21 |
+| 2d | 2×8 | 16 | cold | 1.25 | 1.00 | **2.36** | 2.31 |
+| 1d | 1×64 | 64 | cold | **0.57** | 1.00 | **2.13** | 1.77 |
+| 2d | 4×16 | 64 | cold | 1.22 | 1.00 | **2.33** | 1.88 |
+| 2d | 8×8 | 64 | cold | 2.12 | 1.00 | 2.14 | 1.76 |
 
-- 每台机器、每个形状：四个变体相对 `sync-stage` 的 median 加速比（cold / hot 分开）
-- `cp-async` 与 `cp-async-wait` 的差：重叠本身值多少
-- 1d vs 2d 同元素数（1×16 vs 4×4 vs 2×8，1×64 vs 4×16 vs 8×8）：行数与边界对 `cp.async` 的影响
-- A100 与 h20/h200 在同一形状上的结论是否反号
+hot 口径与 cold 几乎相同（同一形状的比值差 <2%），完整 56 行见 CSV；`hot` 表不另列。
+
+### 结论与失效边界
+
+- **SMEM staging 不是无条件更快**：`global` 在 1d 大 tile（1×16、1×64）上是 `sync-stage` 的
+  **0.57×**（慢近一倍），在 1×4 上打平；但在所有 2d 形状上 `global` 反而比 `sync-stage` 快
+  1.2–2.1×，8×8 上甚至快过 `cp-async`。**收益方向由访问模式和 tile 形状决定，不由「用不用
+  SMEM」决定。**
+- **`cp.async` 的价值主要来自指令，不来自重叠**：`cp-async-wait`（发完立刻等）在 7 个形状里
+  6 个是全场最快（仅 4×4 上 `cp-async` 略高）；双缓冲的 `cp-async` 只在 1×16 与它打平，其余
+  5 个形状明显更慢（1×64：1.77 vs 2.13；8×8：1.76 vs 2.14）。**「搬运与计算重叠」在这个负载
+  上没有兑现收益。**
+- **推测（假设，未由 ncu 证实）**：`cp-async` 用双倍 SMEM、寄存器 40 vs 36，驻留块数减半，
+  而每 tile 的计算量太小、重叠省下的等待填不回占用率损失。要证实需要 occupancy 与 stall
+  计数器，本轮未采。
+- **失效边界**：2d 形状上 `global` 优于 `sync-stage`，说明只有当依赖链在多趟之间确实需要
+  复用、且行边界代价高时，staging 才划算；1×4 这种小 tile 无论哪种 staging 都只是略优。
+
+### ncu 定向计数器（补充证据，2 个代表形状）
+
+命令（H20，root，ncu 2026.2.1；同一二进制，只换 `--kernel-name` 与 `--shapes`）：
+
+```bash
+ncu --kernel-name 'regex:<kernel>$' --launch-count 1 \
+    --metrics gpu__time_duration.sum,dram__bytes_read.sum,dram__bytes_write.sum,\
+launch__registers_per_thread,sm__throughput.avg.pct_of_peak_sustained_elapsed,\
+l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum,l1tex__t_sectors_pipe_lsu_mem_global_op_st.sum \
+    --csv ./build/kernels/03-smem-staging/kernel-03-smem-staging \
+    --shapes 1x16 --warmup 1 --samples 2 --batch 2
+```
+
+原始输出：`results/03-smem-staging/ncu/2026-09-26-h20-counters.csv`（每个变体取首个 launch，
+即正确性校验那次；`gpu_time_ns` 受 profiling 影响，**不作为性能数字**）。
+
+| shape | variant | dram_read | l1_load_sectors | regs | sm_throughput | time_ns |
+|---|---|---|---|---|---|---|
+| 1x16 | global | 269.2 MB | 268.4 M | 32 | 11.3% | 974656 |
+| 1x16 | sync-stage | 268.5 MB | 67.1 M | 38 | 17.5% | 552192 |
+| 1x16 | cp-async-wait | 268.5 MB | 16.8 M | 36 | 30.2% | 247520 |
+| 1x16 | cp-async | 268.5 MB | 16.8 M | 40 | 32.9% | 248064 |
+| 1x64 | global | 300.1 MB | 268.4 M | 32 | 3.5% | 1910720 |
+| 1x64 | sync-stage | 268.5 MB | 67.1 M | 38 | 4.6% | 1080224 |
+| 1x64 | cp-async-wait | 268.5 MB | 16.8 M | 36 | 7.5% | 501440 |
+| 1x64 | cp-async | 268.5 MB | 16.8 M | 40 | 6.5% | 604512 |
+
+- **有证据的**：四个变体的 DRAM 读字节基本相同（~268 MB，`global` 在 1x64 略高），说明慢/快
+  **不是** HBM 流量差异；差异在 L1 load sector 数——`global` 268 M、`sync-stage` 67 M、
+  `cp.async` 系 16.8 M，与「`global` 反复经 L1/L2 重读、staging 只搬一次」一致。寄存器数
+  也**不是** `global` 慢的原因（它最少，32）。
+- **仍是假设**：sector 数为何恰好是这些倍数、`cp-async` 相对 `cp-async-wait` 的占用损失多大，
+  计数器不足以定论。仅凭这 2 个形状、且是正确性 launch，不能外推到全部 7 个形状。
 
 ## 截图
 
-待生成。数据采集后由下面的命令产出：
+![cold speedup](../../figures/03-smem-staging/fig-03-smem-staging-cold-speedup-vs-sync-stage.png)
+![hot speedup](../../figures/03-smem-staging/fig-03-smem-staging-hot-speedup-vs-sync-stage.png)
 
-- `../../figures/03-smem-staging/fig-03-smem-staging-cold-speedup-vs-sync-stage.png`
-- `../../figures/03-smem-staging/fig-03-smem-staging-hot-speedup-vs-sync-stage.png`
-- `../../figures/03-smem-staging/fig-03-smem-staging-cold-sweep.png`
+两图横轴为 7 个形状，纵轴为相对 `sync-stage`（虚线 =1）的 median 加速比，误差棒 p10–p90。
+`global` 的折线在 1d 大 tile 上掉到 0.6 以下、在 2d 上抬到 1–2 之间，正是失效边界的可视化。
 
 ## 复现
 
 ```bash
-cmake --build build --target kernel-03-smem-staging -j
-python3 tools/gpu_quiet_gate.py --need 1 --csv results/03-smem-staging/$(date +%F)-h20.csv \
-    -- python3 tools/run.py --kernel 03-smem-staging --machine h20
-python3 tools/plot.py results/03-smem-staging/*.csv -o figures/03-smem-staging/ \
-    --view sweep --metric speedup --baseline sync-stage
+./tools/collect_h20.sh build
+./tools/collect_h20.sh 03 <GPU>
+python3 tools/plot.py results/03-smem-staging/2026-09-26-h20.csv -o figures/03-smem-staging/ \
+    --view sweep --metric speedup --baseline sync-stage --x-keys pattern,tile
 ```
 
 A100 需要单独用 `-DCMAKE_CUDA_ARCHITECTURES=80` 构建，且先按 `docs/environment-matrix.md` 导出
-forward-compat 的 `LD_LIBRARY_PATH`。
+forward-compat 的 `LD_LIBRARY_PATH`（sm_80 下不编 64 元素 tile）。

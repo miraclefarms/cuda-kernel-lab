@@ -116,20 +116,47 @@ Ridge point = 峰值算力 ÷ 峰值带宽，单位 FLOP/byte。一个 kernel �
 
 ### h20 — H20 141GB HBM3e SXM (`sm_90a`)
 
+本机为 **141GB HBM3e 版本**（带宽 4.8 TB/s），不是 96GB HBM3（4.0 TB/s）。基线表与 ridge
+point 已按此口径记录。8 张卡同型号，数据列一律记 `h20`。
+
+#### 2026-09-26 锁频会话（首三篇 H20 采集，可引用）
+
+| 项 | 值 |
+|----|-----|
+| 驱动版本 | 615.71.09（KMD = UMD = 615.71.09）|
+| CUDA Toolkit | 13.3, V13.3.73 |
+| CUDA UMD | 随内核驱动（native，无需 forward-compat）|
+| 容器镜像 | `nvidia/cuda:13.3.1-devel-ubuntu24.04` 系 |
+| bench-probe 输出 | cc 9.0；SM 78；max threads/SM 2048；regs/SM 65536；L2 60 MiB；显存 139.84 GiB；memory bus 6016 bit；memory clock 3201 MHz；SM clock 上限 1980 MHz；smem/SM 228 KiB；smem/block opt-in 227 KiB；theoretical 4814.30 GB/s；ECC on；async engine 3 |
+| 实测 streaming 上限 / 标称 | best cold **3797.5** / best hot **4047.9** GB/s（read 3293.5 / 3949.3，copy 3755.8 / 3920.7，write 3797.5 / 4047.9，格式 cold / hot，median）；标称 4814 → 78.9% / 84.1%。锁频 **1800 MHz**、静默门禁（PRE 60 s / POST 30 s，`util=0`）通过、`git_dirty=no`。见 `results/01-execution-model/2026-09-26-h20.csv`（commit `0025113`）|
+| 锁频权限 | ✅ root 可锁（`nvidia-smi -lgc` 1800,1800 成功，测完 `-rgc` 复位）|
+| ncu 计数器权限 | ✅ root 可采（`ncu` 2026.2.1；03 篇定向采了 2 个形状）|
+| MIG | Disabled（8 卡均未切分）|
+| 独占 | 目标卡 `utilization.gpu` 门禁通过（PRE/POST 均 0）；残留风险：RUN 期间起止全在窗口内的短命共租户观测不到 |
+
+> **同轮还采集了**：02 篇 7 档尺寸 × 5 协议（`2026-09-26-h20.csv` 等四份锁频/未锁频配对，
+> commit `0025113`）、03 篇 7 形状 × 4 变体（`2026-09-26-h20.csv`，同 commit）。
+> **环境坑（已修）**：该镜像的 `ld.so.conf` 把 `/usr/local/cuda-13.3/compat` 排在 native
+> 驱动目录之前，导致 ≥580 的 KMD 载入旧 compat UMD（610.43.02）而 `cuInit` 报 803；
+> `tools/cuda_compat.py` 现会探测并把可用的 native 目录前插（提交 `9d92b1b`）。
+> `collect_h20.sh` 另修了 01 篇漏传 `bench-probe --csv` 的问题（提交 `0025113`）。
+
+#### 2026-09-14 探索性会话（未锁频，非独占；只作相对比值）
+
 | 项 | 值 |
 |----|-----|
 | 驱动版本 | 590.44.01 |
 | CUDA Toolkit | 13.3.73（V13.3.73）|
 | 容器镜像 | 未使用（裸机，无 docker）|
 | bench-probe 输出 | cc 9.0；SM 78；max threads/SM 2048；regs/SM 65536；L2 60 MiB；显存 139.8 GiB；memory bus 6016 bit；memory clock 3201 MHz；SM clock 1980 MHz；smem/SM 228 KiB；默认功耗上限 500 W |
-| 实测 streaming 上限 / 标称 | best cold **4046.6** / best hot **4306.3** GB/s（read 3317.6 / 3954.2，copy 3775.7 / 3928.8，write 4046.6 / 4306.3，格式 cold / hot）；标称 4814 → 84.1% / 89.5%。2026-09-14 采于**非独占**机器（8×vLLM worker 常驻）且**未锁频**，按纪律只作同会话相对比值，绝对达成率仅供参考。见 `results/01-execution-model/2026-09-14-h20.csv`（commit `dfa8153`）|
-| 锁频权限 | ✅ root 可锁（`nvidia-smi -lgc` 实测成功，测完已 `-rgc`）|
+| 实测 streaming 上限 / 标称 | best cold **4046.6** / best hot **4306.3** GB/s（read 3317.6 / 3954.2，copy 3775.7 / 3928.8，write 4046.6 / 4306.3，格式 cold / hot）；标称 4814 → 84.1% / 89.5%。2026-09-14 采于**非独占**机器（8×vLLM worker 常驻）且**未锁频**，按纪律只作同会话相对比值。见 `results/01-execution-model/2026-09-14-h20.csv`（commit `dfa8153`）|
+| 锁频权限 | ✅ root 可锁（实测成功，测完已 `-rgc`）|
 | ncu 计数器权限 | ✅ root 可采（`ncu` 2026.2.1 实测通过）|
 | MIG | Disabled（8 卡均未切分）|
-| 独占 | 8 卡整机，型号 `H20-3e`；跑分时须确认无其他进程占用目标卡 |
+| 独占 | ❌ 非独占（常驻 worker，仅偶发空窗）|
 
-> 本机为 **141GB HBM3e 版本**（带宽 4.8 TB/s），不是 96GB HBM3（4.0 TB/s）。
-> 基线表与 ridge point 已按此口径记录。8 张卡同型号，数据列一律记 `h20`。
+> 两轮差值主要来自**锁频**（1800 vs 1980 MHz）与**独占性**：锁频会话达成率更低但条件受控，
+> `bench/machine-peaks.json` 的 H20 `bw_ceiling_*` 取 2026-09-26 锁频轮。
 
 ### h200 — H200 141GB SXM (`sm_90a`)
 
@@ -151,12 +178,12 @@ Ridge point = 峰值算力 ÷ 峰值带宽，单位 FLOP/byte。一个 kernel �
 
 任何一条不成立，第 03 篇的测量口径就得改。**开工第一件事就是验证它们。**
 
-h20 上的实测状态（2026-09-14）：
+h20 上的实测状态（2026-09-26 锁频会话）：
 
-1. **驱动版本 ≥ 580.65.06** — ✅ 590.44.01。
-2. **ncu 计数器权限** — ✅ root 下 `ncu` 2026.2.1 可采。
-3. **锁频权限** — ✅ root 下 `nvidia-smi -lgc` 可锁，故可报绝对 TFLOPS。
-4. **MIG 与独占状态** — MIG Disabled；8 卡整机但非独占保证，跑分前需确认目标卡空闲。
+1. **驱动版本 ≥ 580.65.06** — ✅ 615.71.09。
+2. **ncu 计数器权限** — ✅ root 下 `ncu` 2026.2.1 可采（03 篇已用）。
+3. **锁频权限** — ✅ root 下 `nvidia-smi -lgc` 可锁（本轮锁 1800 MHz），故可报绝对带宽。
+4. **MIG 与独占状态** — MIG Disabled；8 卡整机，采集前以目标卡 `utilization.gpu == 0` 判定独占。
 
 1. **驱动版本 ≥ 580.65.06** — CUDA 13.x 的最低驱动要求。远程集群常年跑 535/550/570，
    驱动不够则本项目的容器起不来，CUDA 13 特性全部不可用。这是唯一一个可能直接否掉

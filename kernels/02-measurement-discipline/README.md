@@ -67,43 +67,91 @@
 
 提纲第 4、5 节不是这个二进制能单独回答的，需要按下面的方式采集：
 
-- **锁频 vs 不锁频**（第 4 节）：同一台机器跑两次，一次 `sudo nvidia-smi -lgc` 锁频后带
-  `--clocks-locked`，一次不锁频带 `--tag unlocked`。两份 CSV 的 `sm_clock_mhz` 与分位数宽度直接对比
-- **ncu 计数器**（第 5 节）：待补。h20 上 root 可采（`docs/environment-matrix.md`），采集命令与
-  结论口径在跑数据时补进本节
+- **锁频 vs 不锁频**（第 4 节）：本轮已按 A–B–B–A 采集——锁频（1800 MHz）与未锁频（1980 MHz）
+  各两次，见下文实验表
+- **ncu 计数器**（第 5 节）：本篇的结论是「测法本身改变数字」，由同一 CSV 内不同协议的直接对比
+  就能支撑（未 flush 的协议在小尺寸超过 HBM 标称即为证据），**本轮未采 ncu 计数器，也不作
+  计数器层面的因果断言**。h20 上 root 可采（`docs/environment-matrix.md`），若后续要解释
+  「L2 命中率」等原因再补
 
 ## 实验数据
 
-**待采集。** 三台机器均无有效数据。
+**H20-3e 单机，2026-09-26，锁频 1800 MHz（未锁频对照实测 1980 MHz），驱动 615.71.09，
+MIG Disabled，ECC on，静默门禁通过（PRE/POST `util=0`），commit `0025113`，`git_dirty=no`。**
 
-2026-09-15 在 h20 上做过一次冒烟运行（10 个样本、未提交的工作树）：全部 7 个尺寸的正确性
-校验通过，五个变体都能跑完。该次数字不满足 `git_dirty=no`，**不落盘、不引用**。
+| CSV | 内容 |
+|---|---|
+| `results/02-measurement-discipline/2026-09-26-h20.csv` | 锁频（A1），主表 + `-samples.csv` |
+| `results/02-measurement-discipline/2026-09-26-h20-locked2.csv` | 锁频（A2），A–B–B–A 的第二轮 A |
+| `results/02-measurement-discipline/2026-09-26-h20-unlocked.csv` | 未锁频（B1）|
+| `results/02-measurement-discipline/2026-09-26-h20-unlocked-unlocked2.csv` | 未锁频（B2）|
 
-采集时要回填：
+### 各协议 median 带宽（GB/s，锁频 A1；每档 50 样本）
 
-- 每台机器一张表：各尺寸 × 各变体的 median 带宽，以及相对 `disciplined` 的偏差
-- `wallclock` 与 `disciplined` 的 mean / median / p90 对照（来自 samples 文件）
-- `no-flush` / `batched` 相对 `disciplined` 的偏差随 `ws_over_l2` 的变化，在哪一档收敛
-- 锁频前后同一变体的 p10–p90 宽度
+shape 横轴按 `ws_over_l2`（三块缓冲区之和 ÷ L2，L2 = 60 MiB）排列；`batched` 只有 cold，
+`disciplined` 有 cold 与 hot。
+
+| buf | ws/L2 | wallclock | no-flush | batched | disciplined cold | disciplined hot |
+|---|---|---|---|---|---|---|
+| 3840 KiB | 0.188 | 1065 | 1493 | 2724 | 1241 | 3606 |
+| 7680 KiB | 0.375 | 1995 | 2721 | 4628 | 1867 | 5673 |
+| 15360 KiB | 0.750 | 2584 | 3161 | 3888 | 2516 | 4448 |
+| 30720 KiB | 1.500 | 2992 | 3374 | 3722 | 3091 | 3950 |
+| 61440 KiB | 3.000 | 3485 | 3732 | 3945 | 3571 | 4068 |
+| 122880 KiB | 6.000 | 3787 | 3936 | 4045 | 3822 | 4107 |
+| 262144 KiB | 12.800 | 3958 | 3992 | 4063 | 3979 | 4096 |
+
+### 结论与失效边界
+
+- **工作集装得进 L2 时，测法决定结论**：`batched` 相对 `disciplined cold` 在 7680 KiB 档偏高
+  2.5×、在 3840 KiB 档偏高 2.2×；`no-flush` 偏高 1.2–1.5×。两者都把 L2 带宽冒充成 HBM 带宽。
+- **收敛点**：`ws_over_l2 ≥ 6` 后四种协议（含 hot）落在 3787–4107 GB/s 内，彼此差 <9%；
+  256 MiB 档只差约 3.5%。工作集远大于 L2 时，flush 与否不再重要。
+- **hot 在小尺寸超过 HBM 标称**：7680 KiB 档 `disciplined hot` 报 5673 GB/s > 4814 GB/s，
+  正是因为它不 flush L2、工作集又装得进 L2——**hot 口径在大工作集上才是 HBM 吞吐**。
+  报「HBM 带宽」只能用 cold，或确认工作集 ≫ L2。
+- **`wallclock` 有最宽的分布**：它包含 host 启动与同步，长尾明显；在最小档它甚至低于
+  `disciplined cold`（启动开销占比大），在大尺寸才逼近。任何协议都不该只看单点。
+
+### 锁频 / 未锁频 A–B–B–A（同一张卡、逐样本）
+
+顺序 A1（锁）→B1（不锁）→B2（不锁）→A2（锁）；`wallclock` cold，`ws_over_l2 = 0.188`：
+
+| run | 锁频 | SM 时钟 | mean (ms) | median (ms) | p90 (ms) |
+|---|---|---|---|---|---|
+| A1 | yes | 1800 | 0.011504 | 0.011073 | 0.011770 |
+| B1 | no | 1980 | 0.010979 | 0.010666 | 0.011251 |
+| B2 | no | 1980 | 0.011053 | 0.010718 | 0.011398 |
+| A2 | yes | 1800 | 0.011325 | 0.010931 | 0.011729 |
+
+- **均值一律高于中位数**（如 A1 高 +3.9%）：host 侧长尾被均值折进头条数字，这就是要报分位数的
+  原因。不预设方向，但本轮四个 run 都是 mean > median。
+- **锁频差异很小**：未锁频（1980 MHz）比锁频（1800 MHz）快约 1–4%，且只在小尺寸可见；
+  256 MiB 档 <0.5%。triad 是带宽受限的，SM 时钟不影响 HBM 吞吐。所有锁频轮
+  `clocks_locked=yes`、未锁频轮 `no`，`sm_clock_mhz` 分别记 1800 / 1980。
+- 全部 7 档 × 4 run 的逐样本数据在 `-samples.csv`（每档每协议 50 样本）；此处只列一档代表。
+- **口径限制**：静默门禁只在 PRE/POST 采样，RUN 期间一个起止都在窗口内的短命共租户观测不到
+  （见 `docs/measurement-methodology.md` 的 caveat）。
 
 ## 截图
 
-待生成。数据采集后由下面的命令产出：
+![cold sweep](../../figures/02-measurement-discipline/fig-02-measurement-discipline-cold-sweep.png)
+![hot sweep](../../figures/02-measurement-discipline/fig-02-measurement-discipline-hot-sweep.png)
 
-- `../../figures/02-measurement-discipline/fig-02-measurement-discipline-cold-sweep.png`
-- `../../figures/02-measurement-discipline/fig-02-measurement-discipline-hot-sweep.png`
-- `../../figures/02-measurement-discipline/fig-02-measurement-discipline-cold-speedup-vs-disciplined.png`
+`cold-sweep` 是主图：小工作集下 `batched` 明显在 `no-flush` 与 `disciplined` 之上，随
+`ws_over_l2` 增大四条线收敛。`hot-sweep` 只有 `disciplined`（其余协议无 hot 口径）。
 
 ## 复现
 
 ```bash
-cmake --build build --target kernel-02-measurement-discipline -j
-python3 tools/gpu_quiet_gate.py --need 1 --csv results/02-measurement-discipline/$(date +%F)-h20.csv \
-    -- python3 tools/run.py --kernel 02-measurement-discipline --machine h20 --clocks-locked \
-    -- --samples-out results/02-measurement-discipline/$(date +%F)-h20-samples.csv
-python3 tools/plot.py results/02-measurement-discipline/*-h20.csv results/02-measurement-discipline/*-h200.csv \
-    -o figures/02-measurement-discipline/ --view sweep
+./tools/collect_h20.sh build
+./tools/collect_h20.sh 02 <GPU>
+./tools/collect_h20.sh 02-unlocked <GPU>
+H20_RUN_TAG=unlocked2 ./tools/collect_h20.sh 02-unlocked <GPU>
+H20_RUN_TAG=locked2   ./tools/collect_h20.sh 02 <GPU>
+python3 tools/plot.py results/02-measurement-discipline/2026-09-26-h20.csv \
+    -o figures/02-measurement-discipline/ --view sweep --x-keys buf_kib
 ```
 
-`--clocks-locked` 只有真的执行过 `nvidia-smi -lgc` 才能传。samples 文件没有环境列，靠文件名与
-同日同机器的主 CSV 对应。
+`--clocks-locked` 只有真的执行过 `nvidia-smi -lgc` 才能传（`collect_h20.sh` 自动处理）。
+samples 文件没有环境列，靠文件名与同日同机器的主 CSV 对应；主 CSV 作废时它一并作废。
