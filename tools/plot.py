@@ -293,7 +293,16 @@ def plot_sweep(rows, mode: str, out: pathlib.Path, peaks: dict, metric: str,
                        label=f"{baseline} = 1")
         ax.set_title(machine)
         ax.set_xticks(range(len(shapes)))
-        ax.set_xticklabels([labels[s] for s in shapes], fontsize=6, rotation=0)
+        # Rotate when the tick labels are wide enough to collide: seven
+        # "buf_kib=262144" labels do not fit but wrapped "pattern=1d\ntile=1x64"
+        # ones do. Judge by the longest physical line, not the whole string.
+        tick_labels = [labels[s] for s in shapes]
+        widest = max((len(line) for text in tick_labels for line in text.split("\n")),
+                     default=0)
+        rotate = widest > 12 and len(shapes) > 5
+        ax.set_xticklabels(tick_labels, fontsize=6,
+                           rotation=30 if rotate else 0,
+                           ha="right" if rotate else "center")
         ax.minorticks_off()
         ax.set_xlim(-0.5, len(shapes) - 0.5)
     axes[0][0].set_ylabel("Achieved bandwidth (GB/s)" if metric == "gbps"
