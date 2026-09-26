@@ -129,7 +129,7 @@ if [ "$PHASE" = 01 ]; then
     exit 1
   fi
   CUDA_VISIBLE_DEVICES="$GPU" ./build/kernels/01-execution-model/occupancy-scan > "$OCCUPANCY"
-  RUN_ARGS+=(--binary build/kernels/01-execution-model/bench-probe)
+  RUN_ARGS+=(--binary build/kernels/01-execution-model/bench-probe -- --csv)
 fi
 
 if [ "$PHASE" = 02 ] || [ "$PHASE" = 02-unlocked ]; then
