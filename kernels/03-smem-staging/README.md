@@ -122,15 +122,15 @@ hot 口径与 cold 几乎相同（同一形状的比值差 <2%），完整 56 �
   **0.57×**（慢近一倍），在 1×4 上打平；但在所有 2d 形状上 `global` 反而比 `sync-stage` 快
   1.2–2.1×，8×8 上甚至快过 `cp-async`。**收益方向由访问模式和 tile 形状决定，不由「用不用
   SMEM」决定。**
-- **`cp.async` 的价值主要来自指令，不来自重叠**：`cp-async-wait`（发完立刻等）在 7 个形状里
+- **本组实现里立刻等待已带来大部分收益，双缓冲没有继续获益**：`cp-async-wait`（发完立刻等）在 7 个形状里
   6 个是全场最快（仅 4×4 上 `cp-async` 略高）；双缓冲的 `cp-async` 只在 1×16 与它打平，其余
   5 个形状明显更慢（1×64：1.77 vs 2.13；8×8：1.76 vs 2.14）。**「搬运与计算重叠」在这个负载
-  上没有兑现收益。**
+  上没有兑现收益。** 这组对照同时改变了拷贝路径和资源用量，不能把差值只归因于一条指令。
 - **推测（假设，未由 ncu 证实）**：`cp-async` 用双倍 SMEM、寄存器 40 vs 36，驻留块数减半，
   而每 tile 的计算量太小、重叠省下的等待填不回占用率损失。要证实需要 occupancy 与 stall
   计数器，本轮未采。
-- **失效边界**：2d 形状上 `global` 优于 `sync-stage`，说明只有当依赖链在多趟之间确实需要
-  复用、且行边界代价高时，staging 才划算；1×4 这种小 tile 无论哪种 staging 都只是略优。
+- **失效边界**：本实验的四个 2d 形状上，`global` 均优于 `sync-stage`；1×4 小 tile 的收益也有限。
+  具体由地址计算、缓存访问还是同步开销主导，需进一步拆分实验。
 
 ### ncu 定向计数器（补充证据，2 个代表形状）
 
@@ -145,8 +145,9 @@ l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum,l1tex__t_sectors_pipe_lsu_mem_glo
     --shapes 1x16 --warmup 1 --samples 2 --batch 2
 ```
 
-原始输出：`results/03-smem-staging/ncu/2026-09-26-h20-counters.csv`（每个变体取首个 launch，
-即正确性校验那次；`gpu_time_ns` 受 profiling 影响，**不作为性能数字**）。
+计数器摘录：`results/03-smem-staging/ncu/2026-09-26-h20-counters.csv`（每个变体取首个 launch，
+即正确性校验那次；未保存 ncu 的完整原始 report，正文若引用具体计数器，应先补存原始输出与
+每个变体的完整命令。`gpu_time_ns` 受 profiling 影响，**不作为性能数字**）。
 
 | shape | variant | dram_read | l1_load_sectors | regs | sm_throughput | time_ns |
 |---|---|---|---|---|---|---|

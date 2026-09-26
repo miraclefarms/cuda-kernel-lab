@@ -249,6 +249,7 @@ def plot_sweep(rows, mode: str, out: pathlib.Path, peaks: dict, metric: str,
     fig, axes = plt.subplots(1, len(machines), figsize=(3.6 * len(machines) + 1.6, 3.8),
                              dpi=200, squeeze=False)
     for ax, machine in zip(axes[0], machines):
+        max_plotted = 0.0
         for variant in variants:
             xs, ys, lo, hi = [], [], [], []
             for i, shape in enumerate(shapes):
@@ -272,6 +273,7 @@ def plot_sweep(rows, mode: str, out: pathlib.Path, peaks: dict, metric: str,
                     y, ylo, yhi = base / med, base / p90, base / p10
                 xs.append(i)
                 ys.append(y)
+                max_plotted = max(max_plotted, yhi)
                 lo.append(max(y - ylo, 0.0))
                 hi.append(max(yhi - y, 0.0))
             if not xs:
@@ -287,7 +289,13 @@ def plot_sweep(rows, mode: str, out: pathlib.Path, peaks: dict, metric: str,
                 if peak.get(key):
                     ax.axhline(peak[key], color=INK, linestyle=ls, linewidth=0.9, label=label,
                                zorder=2)
-            ax.set_ylim(bottom=0)
+            # A reference line at the current upper limit gets clipped into the
+            # frame (and its legend still appears). Reserve headroom for both
+            # the data and the two hardware reference lines.
+            max_plotted = max(max_plotted, *(float(peak.get(key) or 0)
+                                             for key in ("bw_theoretical_gbps",
+                                                         f"bw_ceiling_{mode}_gbps")))
+            ax.set_ylim(0, max_plotted * 1.08)
         else:
             ax.axhline(1.0, color=INK, linestyle="--", linewidth=0.9, zorder=2,
                        label=f"{baseline} = 1")
